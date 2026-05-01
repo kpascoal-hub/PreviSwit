@@ -56,8 +56,15 @@ async def handle_message(ws, raw: str):
     """Processa uma mensagem JSON recebida do servidor."""
     try:
         msg = json.loads(raw)
-    except json.JSONDecodeError:
-        log.warning("Mensagem recebida não é JSON válido: %s", raw[:200])
+    except json.JSONDecodeError as e:
+        # ── Erro visível no terminal — NÃO morre em silêncio ──
+        print(f"\n{'='*60}")
+        print(f"❌ ERRO DE FORMATAÇÃO JSON!")
+        print(f"   json.loads() falhou: {e}")
+        print(f"   Conteúdo recebido (primeiros 300 chars):")
+        print(f"   {raw[:300]}")
+        print(f"{'='*60}\n")
+        log.error("JSON inválido recebido do servidor: %s — raw=%s", e, raw[:200])
         return
 
     action = msg.get("action")
@@ -154,6 +161,8 @@ async def listen_forever():
 
                 # Loop de escuta
                 async for raw_msg in ws:
+                    # ── DEBUG: mostra exatamente o que chegou do servidor ──
+                    print(f"\n[RECEBIDO DA NUVEM]: {raw_msg}")
                     await handle_message(ws, raw_msg)
 
         except (
@@ -196,3 +205,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
