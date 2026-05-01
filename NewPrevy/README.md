@@ -19,6 +19,7 @@ Desenvolvido por **PreviSwit** — Engenharia de Software & Cybersecurity.
 
 ## 📸 Preview
 <div align="center">
+  
 ```
                                           _
                                         ª$$$a_
