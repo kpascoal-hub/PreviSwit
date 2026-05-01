@@ -3,10 +3,10 @@
 # 🛡️ PreviSwit
 ### AI-Powered Pentest Framework
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
+![Python](https://img.shields.io/badge/Python-3.10%2B-orange?style=for-the-badge&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-red?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-3.0-orange?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0-blue?style=for-the-badge)
 
 **Framework de pentest automatizado com IA integrada, 3 pipelines independentes e relatório profissional.**  
 Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
