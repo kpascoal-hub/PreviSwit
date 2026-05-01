@@ -1,0 +1,1205 @@
+{
+  "target": "http://localhost:3000",
+  "passive": {
+    "whois": {
+      "registrar": null,
+      "creation": "None",
+      "expiry": "None",
+      "emails": null
+    },
+    "dns": [],
+    "dorks": [],
+    "ssl": {}
+  },
+  "active": {
+    "nmap": {},
+    "gobuster": [],
+    "headers": {
+      "Access-Control-Allow-Origin": "*",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+      "Feature-Policy": "payment 'self'",
+      "X-Recruiting": "/#/jobs",
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "public, max-age=0",
+      "Last-Modified": "Fri, 01 May 2026 14:55:21 GMT",
+      "ETag": "W/\"12518-19de4098049\"",
+      "Content-Type": "text/html; charset=UTF-8",
+      "Vary": "Accept-Encoding",
+      "Content-Encoding": "gzip",
+      "Date": "Fri, 01 May 2026 16:31:41 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "missing_headers": [
+      "Strict-Transport-Security",
+      "Content-Security-Policy",
+      "Referrer-Policy",
+      "Permissions-Policy"
+    ],
+    "cookies": []
+  },
+  "ssl": {
+    "cert": {},
+    "issues": [],
+    "protocol": "",
+    "cipher": ""
+  },
+  "subdomains": {
+    "subdomains": [],
+    "takeover_risks": []
+  },
+  "osint": {
+    "ip": "",
+    "shodan": {},
+    "virustotal": {},
+    "headers_exposed": {}
+  },
+  "scanner": {
+    "nikto": [],
+    "cors": [
+      {
+        "origin": "https://evil.com",
+        "ACAO": "*",
+        "ACAC": "",
+        "severity": "MEDIUM"
+      },
+      {
+        "origin": "null",
+        "ACAO": "*",
+        "ACAC": "",
+        "severity": "MEDIUM"
+      },
+      {
+        "origin": "https://attacker.io",
+        "ACAO": "*",
+        "ACAC": "",
+        "severity": "MEDIUM"
+      }
+    ],
+    "open_redirect": [],
+    "cve_matches": []
+  },
+  "waf": {
+    "detected": false,
+    "waf": null,
+    "confidence": 0,
+    "bypass_hints": []
+  },
+  "crawled_pages": 16,
+  "aggressive": {
+    "js_endpoints": [
+      "/api/Challenges",
+      "/rest/repeat-notification",
+      "/rest/continue-code",
+      "/rest/continue-code-findIt",
+      "/rest/continue-code-fixIt",
+      "/rest/continue-code/apply/",
+      "/rest/continue-code-findIt/apply/",
+      "/rest/continue-code-fixIt/apply/",
+      "/rest/country-mapping",
+      "/api/Users",
+      "/rest/user/authentication-details/",
+      "/rest/user/login",
+      "/rest/user/change-password?current=",
+      "/rest/user/reset-password",
+      "/rest/user/whoami",
+      "/rest/saveLoginIp",
+      "/rest/deluxe-membership",
+      "/rest/admin",
+      "/api/BasketItems",
+      "/rest/track-order",
+      "/api/Feedbacks",
+      "/rest/captcha",
+      "/api/SecurityAnswers",
+      "/api/SecurityQuestions",
+      "/rest/user/security-question?email=",
+      "/rest/products",
+      "/api/Products",
+      "/api/Quantitys",
+      "/api/Complaints",
+      "/rest/chatbot",
+      "/api/Recycles",
+      "/api/Addresss",
+      "/rest/image-captcha/",
+      "/rest/user",
+      "/rest/wallet/balance",
+      "/api/Deliverys",
+      "/api/Cards",
+      "/rest/order-history",
+      "/rest/memories",
+      "/api/Hints"
+    ],
+    "path_traversal": [],
+    "sensitive_paths": [
+      {
+        "url": "http://localhost:3000/.env",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/.git/config",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/.git/HEAD",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/config.php",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/wp-config.php",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/backup.sql",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/dump.sql",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/.htaccess",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/server-status",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/phpinfo.php",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/info.php",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/debug",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/actuator",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/actuator/env",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/actuator/health",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/.aws/credentials",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/config.yml",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      },
+      {
+        "url": "http://localhost:3000/config.yaml",
+        "size": 75032,
+        "preview": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-License-Identifier: MI",
+        "severity": "CRITICAL"
+      }
+    ]
+  },
+  "api_fuzzer": {
+    "discovered_endpoints": [
+      {
+        "url": "http://localhost:3000/rest/captcha",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/SecurityAnswers",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/chatbot",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code-findIt/apply/",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/authentication-details/",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Challenges",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/repeat-notification",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Feedbacks",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/products",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/wallet/balance",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Quantitys",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code/apply/",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code-fixIt",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Recycles",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code-fixIt/apply/",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Cards",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/login",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/order-history",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Complaints",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/saveLoginIp",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Deliverys",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code-findIt",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/security-question?email=",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/memories",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/deluxe-membership",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/BasketItems",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/continue-code",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/SecurityQuestions",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/country-mapping",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Users",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Products",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/track-order",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Addresss",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/whoami",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/image-captcha/",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/admin",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/change-password?current=",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/api/Hints",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/rest/user/reset-password",
+        "source": "JS"
+      },
+      {
+        "url": "http://localhost:3000/swagger.json",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/swagger-ui.html",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/openapi.json",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/api-docs",
+        "status": 200,
+        "size": 3106,
+        "ct": "text/html; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/v1/",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/v2/",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/v3/",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/.well-known/security.txt",
+        "status": 200,
+        "size": 475,
+        "ct": "text/plain; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/server-status",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      },
+      {
+        "url": "http://localhost:3000/server-info",
+        "status": 200,
+        "size": 75032,
+        "ct": "text/html; charset=UTF-8"
+      }
+    ],
+    "verb_tampering": [],
+    "exposed_endpoints": []
+  },
+  "graphql": {
+    "endpoints_found": [],
+    "introspection": [],
+    "unauth_data": [],
+    "injection_hints": [],
+    "dos_risk": []
+  },
+  "clickjacking": {
+    "url": "http://localhost:3000",
+    "vulnerable": false,
+    "details": {
+      "X-Frame-Options": "SAMEORIGIN",
+      "CSP frame-ancestors": "AUSENTE"
+    }
+  },
+  "rate_limit": [
+    {
+      "url": "http://localhost:3000/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/signin",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/auth",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/wp-login.php",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/admin/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/user/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/account/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/session",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    }
+  ],
+  "plugins": [
+    {
+      "url": "http://localhost:3000",
+      "issue": "CSP ausente",
+      "severity": "MEDIUM",
+      "source": "Plugin:CSPCheck"
+    },
+    {
+      "url": "http://localhost:3000",
+      "issue": "Security headers ausentes: Strict-Transport-Security, Content-Security-Policy, Referrer-Policy, Permissions-Policy",
+      "severity": "MEDIUM",
+      "source": "Plugin:HeadersCheck"
+    }
+  ],
+  "jwt": [],
+  "idor": [],
+  "technologies": [],
+  "secrets": [],
+  "smart_analysis": [
+    {
+      "url": "http://localhost:3000/polyfills.js",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/scripts.js",
+      "issue": "Keyword sensível: 'api_key'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/scripts.js",
+      "issue": "Keyword sensível: 'test'",
+      "severity": "LOW",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'password='",
+      "severity": "CRITICAL",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'token'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'password'",
+      "severity": "MEDIUM",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'debug'",
+      "severity": "LOW",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    }
+  ],
+  "exploitation": [
+    {
+      "type": "Possível SSRF",
+      "param": "url",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "redirect",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "next",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "src",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "href",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "path",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter"
+    }
+  ],
+  "ai_insights": [
+    "🔴 19 finding(s) CRÍTICO(s) — requerem atenção imediata antes de qualquer deploy.",
+    "🌐 SSRF detectado — possível acesso a infraestrutura interna ou metadata de cloud.",
+    "🔁 Issues recorrentes entre scans: Ausência de rate limiting em endpoint de autenticação, SSRF, Keyword sensível: 'password' — padrão sistêmico."
+  ],
+  "ai_top_issues": [
+    {
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "count": 93
+    },
+    {
+      "issue": "SSRF",
+      "count": 60
+    },
+    {
+      "issue": "Keyword sensível: 'password'",
+      "count": 34
+    },
+    {
+      "issue": "Keyword sensível: 'test'",
+      "count": 34
+    },
+    {
+      "issue": "Keyword sensível: 'root'",
+      "count": 31
+    },
+    {
+      "issue": "Keyword sensível: 'token'",
+      "count": 29
+    },
+    {
+      "issue": "Keyword sensível: 'debug'",
+      "count": 16
+    },
+    {
+      "issue": "SQL Injection",
+      "count": 15
+    }
+  ],
+  "findings_prioritized": [
+    {
+      "issue": "Path sensível exposto: /backup.sql",
+      "url": "http://localhost:3000/backup.sql",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /dump.sql",
+      "url": "http://localhost:3000/dump.sql",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "url",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "redirect",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "next",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "src",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "href",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "type": "Possível SSRF",
+      "param": "path",
+      "payload": "http://127.0.0.1",
+      "url": "http://localhost:3000",
+      "severity": "HIGH",
+      "source": "AI:Exploiter",
+      "issue": "SSRF"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'password='",
+      "severity": "CRITICAL",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "issue": "Path sensível exposto: /debug",
+      "url": "http://localhost:3000/debug",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'token'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/polyfills.js",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/scripts.js",
+      "issue": "Keyword sensível: 'api_key'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/",
+      "issue": "Keyword sensível: 'root'",
+      "severity": "HIGH",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "issue": "Path sensível exposto: /.env",
+      "url": "http://localhost:3000/.env",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /.git/config",
+      "url": "http://localhost:3000/.git/config",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /.git/HEAD",
+      "url": "http://localhost:3000/.git/HEAD",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /config.php",
+      "url": "http://localhost:3000/config.php",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /wp-config.php",
+      "url": "http://localhost:3000/wp-config.php",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /.htaccess",
+      "url": "http://localhost:3000/.htaccess",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /server-status",
+      "url": "http://localhost:3000/server-status",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /phpinfo.php",
+      "url": "http://localhost:3000/phpinfo.php",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /info.php",
+      "url": "http://localhost:3000/info.php",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /actuator",
+      "url": "http://localhost:3000/actuator",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /actuator/env",
+      "url": "http://localhost:3000/actuator/env",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /actuator/health",
+      "url": "http://localhost:3000/actuator/health",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /.aws/credentials",
+      "url": "http://localhost:3000/.aws/credentials",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /config.yml",
+      "url": "http://localhost:3000/config.yml",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "issue": "Path sensível exposto: /config.yaml",
+      "url": "http://localhost:3000/config.yaml",
+      "severity": "CRITICAL",
+      "source": "AggressiveEngine"
+    },
+    {
+      "url": "http://localhost:3000/admin/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'password'",
+      "severity": "MEDIUM",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/signin",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/auth",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/wp-login.php",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/user/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/account/login",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000/session",
+      "issue": "Ausência de rate limiting em endpoint de autenticação",
+      "severity": "MEDIUM",
+      "evidence": "10 requisições sem bloqueio (códigos: {200})",
+      "source": "RateLimitTester"
+    },
+    {
+      "url": "http://localhost:3000",
+      "issue": "Security headers ausentes: Strict-Transport-Security, Content-Security-Policy, Referrer-Policy, Permissions-Policy",
+      "severity": "MEDIUM",
+      "source": "Plugin:headers_check"
+    },
+    {
+      "url": "http://localhost:3000/scripts.js",
+      "issue": "Keyword sensível: 'test'",
+      "severity": "LOW",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000/main.js",
+      "issue": "Keyword sensível: 'debug'",
+      "severity": "LOW",
+      "source": "AI:SmartAnalyzer"
+    },
+    {
+      "url": "http://localhost:3000",
+      "issue": "CSP ausente",
+      "severity": "MEDIUM",
+      "source": "Plugin:csp_check"
+    }
+  ],
+  "cve_matches": [],
+  "attack": {
+    "sqli": {
+      "db_version": "69.5241935484",
+      "tables": [
+        "Copyright",
+        "Bjoern",
+        "Kimminich",
+        "OWASP",
+        "Juice",
+        "Shop",
+        "contributors",
+        "SPDX",
+        "License",
+        "Identifier",
+        "MIT",
+        "doctype",
+        "lang",
+        "data",
+        "beasties",
+        "container",
+        "head",
+        "meta",
+        "charset",
+        "utf",
+        "title",
+        "name",
+        "description",
+        "content",
+        "Probably",
+        "most",
+        "modern",
+        "sophisticated",
+        "insecure",
+        "web",
+        "application",
+        "viewport",
+        "width",
+        "device",
+        "initial",
+        "scale",
+        "link",
+        "favicon",
+        "rel",
+        "icon"
+      ],
+      "dumped_data": [],
+      "auth_bypassed": [],
+      "attack_log": [
+        "2 finding(s) SQLi para explorar.",
+        "Atacando: http://localhost:3000/backup.sql | param=id | method=GET",
+        "Versão do banco: 69.5241935484",
+        "Tabelas encontradas: Copyright, Bjoern, Kimminich, OWASP, Juice, Shop, contributors, SPDX, License, Identifier, MIT, doctype, lang, data, beasties",
+        "Atacando: http://localhost:3000/dump.sql | param=id | method=GET"
+      ]
+    },
+    "xss": {},
+    "path": {
+      "files_read": [],
+      "app_configs": [
+        {
+          "file": ".env",
+          "url": "http://localhost:3000/.env",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-Li"
+        },
+        {
+          "file": "config.php",
+          "url": "http://localhost:3000/config.php",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-Li"
+        },
+        {
+          "file": "wp-config.php",
+          "url": "http://localhost:3000/wp-config.php",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-Li"
+        },
+        {
+          "file": "database.yml",
+          "url": "http://localhost:3000/database.yml",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-Li"
+        },
+        {
+          "file": "docker-compose.yml",
+          "url": "http://localhost:3000/docker-compose.yml",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\r   ~ SPDX-Li"
+        }
+      ],
+      "log_poison": false,
+      "attack_log": [
+        "Configuração sensível exposta: http://localhost:3000/.env",
+        "Configuração sensível exposta: http://localhost:3000/config.php",
+        "Configuração sensível exposta: http://localhost:3000/wp-config.php",
+        "Configuração sensível exposta: http://localhost:3000/database.yml",
+        "Configuração sensível exposta: http://localhost:3000/docker-compose.yml"
+      ]
+    },
+    "auth": {
+      "valid_credentials": [],
+      "user_enum": [],
+      "endpoints_tested": [
+        "http://localhost:3000/user/login",
+        "http://localhost:3000/session",
+        "http://localhost:3000/wp-login.php",
+        "http://localhost:3000/admin/login",
+        "http://localhost:3000/account/login",
+        "http://localhost:3000/auth"
+      ],
+      "attack_log": [
+        "Endpoint de auth ativo: http://localhost:3000/login [200]",
+        "Endpoint de auth ativo: http://localhost:3000/signin [200]",
+        "Endpoint de auth ativo: http://localhost:3000/auth [200]",
+        "Endpoint de auth ativo: http://localhost:3000/auth/login [200]",
+        "Endpoint de auth ativo: http://localhost:3000/user/login [200]",
+        "Endpoint de auth ativo: http://localhost:3000/account/login [200]",
+        "Endpoint de auth ativo: http://localhost:3000/admin/login [200]",
+        "Endpoint de auth ativo: http://localhost:3000/wp-login.php [200]",
+        "Endpoint de auth ativo: http://localhost:3000/wp-admin [200]",
+        "6 endpoint(s) de autenticação para atacar.",
+        "Credential stuffing em http://localhost:3000/user/login...",
+        "Enumerando usuários em http://localhost:3000/user/login...",
+        "Credential stuffing em http://localhost:3000/session...",
+        "Enumerando usuários em http://localhost:3000/session...",
+        "Credential stuffing em http://localhost:3000/wp-login.php...",
+        "Enumerando usuários em http://localhost:3000/wp-login.php...",
+        "Credential stuffing em http://localhost:3000/admin/login...",
+        "Enumerando usuários em http://localhost:3000/admin/login...",
+        "Credential stuffing em http://localhost:3000/account/login...",
+        "Enumerando usuários em http://localhost:3000/account/login...",
+        "Credential stuffing em http://localhost:3000/auth...",
+        "Enumerando usuários em http://localhost:3000/auth..."
+      ]
+    },
+    "juice": {
+      "advanced_xss": [],
+      "sensitive_files": [
+        {
+          "path": "/metrics",
+          "excerpt": "# HELP file_uploads_count Total number of successful file uploads grouped by fil"
+        },
+        {
+          "path": "/ftp/acquisitions.md",
+          "excerpt": "# Planned Acquisitions\r \r > This document is confidential! Do not distribute!\r \r"
+        },
+        {
+          "path": "/ftp/legal.md",
+          "excerpt": "# Legal Information\r \r Lorem ipsum dolor sit amet, consetetur sadipscing elitr, "
+        },
+        {
+          "path": "/privacy-security/privacy-policy",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contri"
+        },
+        {
+          "path": "/%23/score-board",
+          "excerpt": "<!--\r   ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contri"
+        }
+      ],
+      "business_logic": [],
+      "insecure_deserialization": [],
+      "attack_log": [
+        "Iniciando bateria de ataques avançados/específicos...",
+        "Testando Payloads de XSS Avançado (Iframes, Video, SoundCloud)...",
+        "Procurando métricas, score board e documentos confidenciais...",
+        "Acesso não autorizado confirmado em: /metrics",
+        "Acesso não autorizado confirmado em: /ftp/acquisitions.md",
+        "Acesso não autorizado confirmado em: /ftp/legal.md",
+        "Acesso não autorizado confirmado em: /privacy-security/privacy-policy",
+        "Acesso não autorizado confirmado em: /%23/score-board",
+        "Testando Lógica de Negócio (Zero Stars, Open Redirect, etc)...",
+        "Testando Insecure Deserialization (RCE DoS) no endpoint B2B..."
+      ]
+    },
+    "summary": {
+      "db_version": "69.5241935484",
+      "tables_found": 40,
+      "records_dumped": 0,
+      "auth_bypassed": 0,
+      "xss_confirmed": 0,
+      "dom_xss": 0,
+      "files_read": 0,
+      "configs_exposed": 5,
+      "log_poison": false,
+      "valid_creds": 0,
+      "users_enumerated": 0,
+      "juice_adv_xss": 0,
+      "juice_logic": 0
+    },
+    "insights": [
+      "💣 Banco de dados comprometido — versão: 69.5241935484. Dump de dados sensíveis pode ser possível.",
+      "⚙️  5 arquivo(s) de configuração da aplicação acessados — possível exposição de credenciais.",
+      "📄 Arquivos Confidenciais/Métricas acessados: 5 arquivo(s)."
+    ]
+  },
+  "attack_insights": [
+    "💣 Banco de dados comprometido — versão: 69.5241935484. Dump de dados sensíveis pode ser possível.",
+    "⚙️  5 arquivo(s) de configuração da aplicação acessados — possível exposição de credenciais.",
+    "📄 Arquivos Confidenciais/Métricas acessados: 5 arquivo(s)."
+  ],
+  "attack_summary": {
+    "db_version": "69.5241935484",
+    "tables_found": 40,
+    "records_dumped": 0,
+    "auth_bypassed": 0,
+    "xss_confirmed": 0,
+    "dom_xss": 0,
+    "files_read": 0,
+    "configs_exposed": 5,
+    "log_poison": false,
+    "valid_creds": 0,
+    "users_enumerated": 0,
+    "juice_adv_xss": 0,
+    "juice_logic": 0
+  }
+}
