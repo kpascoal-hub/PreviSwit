@@ -18,7 +18,7 @@ Desenvolvido por **PreviSwit** — Engenharia de Software & Cybersecurity.
 ---
 
 ## 📸 Preview
-
+<div align="center">
 ```
                                           _
                                         ª$$$a_
@@ -53,7 +53,7 @@ o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML
    └────────────────────────────────────────────────────────────────────────────────┘
     
 ```
-
+</div>
 ---
 
 ## ✨ O que é
