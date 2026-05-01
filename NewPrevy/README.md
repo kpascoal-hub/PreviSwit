@@ -234,8 +234,6 @@ O autor não se responsabiliza pelo uso indevido.
 
 **PreviSwit**  
 Engenharia de Software · Cybersecurity  
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-PreviSwit_Felype-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/eduardo-felype-760a1725a/)
-
 ---
 
 <div align="center">
