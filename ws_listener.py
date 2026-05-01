@@ -20,7 +20,7 @@ import websockets
 # ─── Configuração ───────────────────────────────────────────────────────────
 WS_URI = os.getenv(
     "PREVISWIT_WS_URI",
-    "wss://SUA_URL_DO_RENDER.onrender.com/ws/agent_01",
+    "wss:https://prevyswitserver.onrender.com/",
 )
 
 AGENT_ID        = os.getenv("PREVISWIT_AGENT_ID", "agent_01")
