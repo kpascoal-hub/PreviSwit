@@ -18,7 +18,7 @@ class ActiveRecon:
         print_status(f"Nmap em {self.domain}...", "INFO")
         try:
             nm = nmap.PortScanner()
-            nm.scan(self.domain, arguments="-sV -T4 --top-ports 1000 --script=banner")
+            nm.scan(self.domain, arguments="-sV -T4 --top-ports 100 --script=banner")
             for host in nm.all_hosts():
                 host_data = {}
                 for proto in nm[host].all_protocols():

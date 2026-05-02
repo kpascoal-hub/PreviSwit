@@ -25,8 +25,8 @@ class Scanner:
     def run_nikto(self):
         print_status("Nikto HTTP scan...", "INFO")
         try:
-            cmd = [Config.NIKTO_PATH, "-h", self.target, "-ask=no", "-nointeractive"]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            cmd = [Config.NIKTO_PATH, "-h", self.target, "-ask=no", "-nointeractive","Tuning", "x"]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             for line in proc.stdout.split("\n"):
                 if line.startswith("+"):
                     self.results["nikto"].append(line.strip())
