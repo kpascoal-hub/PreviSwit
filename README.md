@@ -12,7 +12,6 @@ Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 
 > ⚠️ **USO EXCLUSIVO EM ALVOS COM AUTORIZAÇÃO ESCRITA. Segurança ofensiva responsável.**
 
-</div>
 
 ---
 
