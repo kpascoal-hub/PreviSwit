@@ -1,7 +1,3 @@
-<div align="center">
-<div class="logo">
-
-![](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzQ0IiBoZWlnaHQ9IjE3NiIgdmlld0JveD0iMCAwIDc0NCAxNzYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTE1LjUgMTEyQzE2LjUwMDEgMTEzIDIyLjU5ODYgMTA4LjcwMiAyMCAxMDhDMTcuNDAxNSAxMDcuMjk4IDE2LjAwMDEgMTA4IDE1LjUgMTA4LjVDMTUgMTA5IDE0LjUgMTExIDE1LjUgMTEyWiIgZmlsbD0id2hpdGUiIHN0cm9rZT0id2hpdGUiLz48L3N2Zz4)
 
 # 🛡️ PreviSwit
 ### AI-Powered Pentest Framework
