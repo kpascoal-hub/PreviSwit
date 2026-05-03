@@ -43,8 +43,9 @@ Siga rigorosamente este schema:
     {
       "url": "<endpoint alvo completo>",
       "method": "GET|POST|PUT|DELETE",
-      "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+      "headers": {"Content-Type": "application/json"},
       "data": "<payload ofensivo, ex: ' OR 1=1 --> ou json>",
+      "is_json": true,
       "vulnerability_type": "SQLi | XSS | SSRF | LFI | CMDi | etc",
       "success_indicator": "<string esperada na resposta HTTP se o ataque funcionar, ex: syntax error>"
     }
@@ -53,8 +54,8 @@ Siga rigorosamente este schema:
 ```
 
 ### Regras Rigorosas:
-1. Analise o contexto para deduzir prováveis falhas (ex: parâmetros ?url= são alvos para SSRF, campos de busca para XSS/SQLi).
-2. Construa `data` condizente com o método e Content-Type (ex: json para `application/json`, querystring para `application/x-www-form-urlencoded`).
+1. Você DEVE basear seus ataques EXCLUSIVAMENTE nos endpoints, rotas e parâmetros fornecidos no JSON de contexto (scan_results). É ESTRITAMENTE PROIBIDO inventar caminhos genéricos como /login ou /ping se eles não aparecerem nos dados.
+2. Construa `data` condizente com o método e Content-Type (ex: json para `application/json`, querystring para `application/x-www-form-urlencoded`). Use a flag `"is_json"` corretamente.
 3. O `success_indicator` deve ser o mais preciso possível para evitar falsos positivos na validação automatizada subsequente.
 4. NENHUMA EXPLICAÇÃO. NENHUM COMENTÁRIO. APENAS O JSON VÁLIDO DE RETORNO.
 """
@@ -164,6 +165,7 @@ class GeminiAttacker:
                 method = atk.get("method", "GET").upper()
                 headers = atk.get("headers", {})
                 data = atk.get("data")
+                is_json = atk.get("is_json", False)
                 vuln_type = atk.get("vulnerability_type", "Unknown")
                 indicator = atk.get("success_indicator", "")
 
@@ -190,18 +192,30 @@ class GeminiAttacker:
                             # Se a IA sugeriu string para GET, anexa ou manda via params hardcoded
                             req_kwargs["params"] = data
                         res = requests.get(**req_kwargs)
-                    elif method == "POST":
-                        req_kwargs["data"] = data
-                        res = requests.post(**req_kwargs)
-                    elif method == "PUT":
-                        req_kwargs["data"] = data
-                        res = requests.put(**req_kwargs)
-                    elif method == "DELETE":
-                        req_kwargs["data"] = data
-                        res = requests.delete(**req_kwargs)
                     else:
-                        req_kwargs["data"] = data
-                        res = requests.request(method, **req_kwargs)
+                        if is_json:
+                            # Se a string veio como json, converte para dict antes de usar json=
+                            if isinstance(data, str):
+                                try:
+                                    parsed_data = json.loads(data)
+                                except json.JSONDecodeError:
+                                    parsed_data = data  # Envia a string crua se falhar no parse
+                                req_kwargs["json"] = parsed_data
+                            else:
+                                req_kwargs["json"] = data
+                        else:
+                            req_kwargs["data"] = data
+                            
+                        if method == "POST":
+                            res = requests.post(**req_kwargs)
+                        elif method == "PUT":
+                            res = requests.put(**req_kwargs)
+                        elif method == "DELETE":
+                            res = requests.delete(**req_kwargs)
+                        else:
+                            res = requests.request(method, **req_kwargs)
+
+                    print(f"   [DEBUG] Status: {res.status_code} | Resumo: {res.text[:100].replace(chr(10), ' ').strip()}...")
 
                     # Valida se o success_indicator existe no corpo da resposta
                     if indicator and indicator.lower() in res.text.lower():
@@ -217,6 +231,7 @@ class GeminiAttacker:
                         log.debug(f"Falha ao confirmar {vuln_type}. Indicador não encontrado.")
 
                 except requests.exceptions.RequestException as e:
+                    print(f"   [DEBUG] Request error no alvo {url}: {e}")
                     log.debug(f"Request error no alvo {url}: {e}")
 
             print_status(f"Execução finalizada. {len(confirmed_vulns)} vulnerabilidades ativamente confirmadas.", "CRIT")
