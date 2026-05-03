@@ -11,7 +11,8 @@ SECURITY_HEADERS = [
 class ActiveRecon:
     def __init__(self, target):
         self.target  = target
-        self.domain  = urlparse(target).netloc or target
+        parsed = urlparse(target)
+        self.domain  = parsed.hostname or parsed.netloc or target
         self.results = {"nmap":{},"gobuster":[],"headers":{},"missing_headers":[],"cookies":[]}
 
     def run_nmap(self):

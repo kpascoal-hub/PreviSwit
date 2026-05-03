@@ -25,3 +25,5 @@ websockets>=12.0
 # Opcional (instale separado se quiser Shodan SDK)
 # shodan==1.30.0
 
+# Pipeline 6 — Gemini Overwatch
+google-genai>=1.0.0

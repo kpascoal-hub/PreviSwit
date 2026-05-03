@@ -45,8 +45,8 @@ def parse_args():
     p.add_argument("target",          help="URL alvo (ex: http://site.com)")
     p.add_argument("--shodan",        default="", help="Shodan API Key (opcional)")
     p.add_argument("--vt",            default="", help="VirusTotal API Key (opcional)")
-    p.add_argument("--pipeline",      default="all", choices=["1","2","3","4","all"],
-                   help="Pipeline: 1=tradicional, 2=agressivo, 3=IA, 4=ataque, all=todos")
+    p.add_argument("--pipeline",      default="all", choices=["1","2","3","4","6","all"],
+                   help="Pipeline: 1=tradicional, 2=agressivo, 3=IA, 4=ataque, 6=Gemini Attacker, all=todos")
     p.add_argument("--no-aggressive", action="store_true", help="Pula pipeline agressivo")
     p.add_argument("--attack",        action="store_true",
                    help="Força Pipeline 4 (ataque) mesmo sem --pipeline 4 ou all")
@@ -83,7 +83,7 @@ def run_scan(target: str, pipeline: str = "all", shodan: str = "",
 
     Args:
         target:         URL alvo (ex: http://site.com)
-        pipeline:       "1", "2", "3", "4" ou "all"
+        pipeline:       "1", "2", "3", "4", "6" ou "all"
         shodan:         Shodan API key (opcional)
         vt:             VirusTotal API key (opcional)
         no_aggressive:  Pula pipeline 2 se True
@@ -249,6 +249,30 @@ def run_scan(target: str, pipeline: str = "all", shodan: str = "",
         full["attack"] = attack_results
         full["attack_insights"] = attack_results.get("insights", [])
         full["attack_summary"]  = attack_results.get("summary", {})
+
+    # ══════════════════════════════════════════════════════
+    # PIPELINE 6 — GEMINI ATTACKER: Teste ofensivo (Pipeline 6)
+    # ══════════════════════════════════════════════════════
+    if pipeline in ("6", "all"):
+        print_status("", "INFO")
+        print_status("━━━ GEMINI ACTIVE ATTACKER ━━━━━━━━━━━━━━━━━━━━━━━━━", "CRIT")
+
+        from modules.ai_gemini.gemini_pipeline import run_offensive_ai
+        gemini_result = run_offensive_ai(full)
+        full["gemini_attacker"] = gemini_result
+
+        # Imprime resultados das confirmações
+        confirmed = gemini_result.get("confirmed_vulnerabilities", [])
+        print_status(
+            f"Gemini Attacker: {len(confirmed)} vulnerabilidades exploradas com sucesso.",
+            "SUCCESS" if len(confirmed) > 0 else "INFO",
+        )
+        
+        if confirmed:
+            for i, atk in enumerate(confirmed, 1):
+                vuln = atk.get('vulnerability_type', 'N/A')
+                url = atk.get('url', 'N/A')
+                print_status(f"  {i}. [CONFIRMADA] {vuln} em {url}", "CRIT")
 
     # ══════════════════════════════════════════════════════
     # RELATÓRIO FINAL

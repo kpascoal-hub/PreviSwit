@@ -91,32 +91,59 @@ async def handle_message(ws, raw: str):
                 _run_scan_blocking, target, pipeline
             )
 
-            # Monta resumo compacto para enviar de volta
-            findings  = results.get("findings_prioritized", [])
-            total     = len(findings)
-            critical  = sum(1 for f in findings if f.get("severity", "").upper() == "CRITICAL")
-            high      = sum(1 for f in findings if f.get("severity", "").upper() == "HIGH")
+            # ── Lê o arquivo JSON gerado pelo run_scan ──────────────
+            json_path = report_paths.get("json")
 
+            if not json_path:
+                raise FileNotFoundError(
+                    "run_scan não retornou o caminho do relatório JSON em report_paths"
+                )
+
+            log.info("📂 Lendo relatório JSON: %s", json_path)
+
+            # Leitura síncrona em thread para não bloquear o loop
+            def _read_json(path: str) -> dict:
+                with open(path, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+
+            json_data = await asyncio.to_thread(_read_json, json_path)
+
+            # Payload final com o conteúdo completo do JSON
             response = {
-                "agent":    AGENT_ID,
-                "status":   "SCAN_COMPLETE",
-                "target":   target,
-                "summary": {
-                    "total_findings": total,
-                    "critical":       critical,
-                    "high":           high,
-                },
-                "report_paths": report_paths,
-                "ai_insights":  results.get("ai_insights", [])[:5],
-                "ts":           datetime.now(timezone.utc).isoformat(),
+                "action": "SCAN_RESULT",
+                "target": target,
+                "data":   json_data,
             }
 
-            log.info("✅ SCAN CONCLUÍDO  →  %d findings (%d crit, %d high)",
-                     total, critical, high)
+            log.info("✅ SCAN CONCLUÍDO — JSON lido com sucesso (%d bytes)",
+                     len(json.dumps(json_data, default=str)))
+
+        except FileNotFoundError as fnf:
+            log.error("📁 Arquivo JSON não encontrado: %s", fnf)
+            response = {
+                "action": "SCAN_RESULT",
+                "agent":  AGENT_ID,
+                "status": "SCAN_ERROR",
+                "target": target,
+                "error":  f"Arquivo JSON não encontrado: {fnf}",
+                "ts":     datetime.now(timezone.utc).isoformat(),
+            }
+
+        except (json.JSONDecodeError, OSError) as read_err:
+            log.error("❌ Erro ao ler/decodificar o JSON: %s", read_err)
+            response = {
+                "action": "SCAN_RESULT",
+                "agent":  AGENT_ID,
+                "status": "SCAN_ERROR",
+                "target": target,
+                "error":  f"Erro ao ler relatório JSON: {read_err}",
+                "ts":     datetime.now(timezone.utc).isoformat(),
+            }
 
         except Exception as exc:
             log.exception("Erro durante o scan de %s", target)
             response = {
+                "action": "SCAN_RESULT",
                 "agent":  AGENT_ID,
                 "status": "SCAN_ERROR",
                 "target": target,

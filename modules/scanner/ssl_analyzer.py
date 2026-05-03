@@ -12,7 +12,7 @@ class SSLAnalyzer:
     def __init__(self, target: str, context=None):
         from urllib.parse import urlparse
         parsed       = urlparse(target)
-        self.host    = parsed.netloc or target
+        self.host    = parsed.hostname or parsed.netloc or target
         self.target  = target
         self.context = context
         self.results = {
@@ -24,6 +24,10 @@ class SSLAnalyzer:
 
     def analyze(self):
         print_status("SSL/TLS Analysis...", "INFO")
+        if self.host in ('localhost', '127.0.0.1'):
+            print_status("Ignorado: Host local ou sem resolução de DNS", "WARN")
+            return self.results
+
         try:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
@@ -100,6 +104,9 @@ class SSLAnalyzer:
             if self.context: self.context.add_finding(issue)
             print_status(f"SSL Error: {e}", "ERROR")
         except Exception as e:
-            print_status(f"SSL Analyzer: {e}", "WARN")
+            if 'getaddrinfo failed' in str(e):
+                print_status('Ignorado: Host local ou sem resolução de DNS', 'WARN')
+            else:
+                print_status(f"SSL Analyzer: {e}", "WARN")
 
         return self.results
