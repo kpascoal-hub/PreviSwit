@@ -235,6 +235,7 @@ O autor não se responsabiliza pelo uso indevido.
 
 **PreviSwit Team**  
 Engenharia de Software · Cybersecurity  
+
 ---
 
 <div align="center">
