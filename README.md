@@ -72,24 +72,27 @@ O **PreviSwit** é um framework de pentest automatizado construído do zero em P
 ```
 main.py
  │
- ├── Pipeline 1 — TRADICIONAL
- │     WHOIS · DNS · SSL/TLS · Subdomain Enum + Takeover
- │     OSINT (Shodan/InternetDB · urlscan.io · VirusTotal)
- │     Nmap · Gobuster · CORS · Open Redirect · CVE Lookup
+ ├── P1 — RECON PASSIVO (OSINT)
+ │     WHOIS · DNS · Shodan · InternetDB · VirusTotal · Google Dorks
  │
- ├── Pipeline 2 — AGRESSIVO
- │     WAF Fingerprinting (Cloudflare, AWS WAF, ModSecurity, Akamai...)
- │     Crawler (robots.txt · sitemap · JS files · forms)
- │     Path Traversal · Paths Sensíveis · JS Endpoint Extraction
- │     API Fuzzer · Verb Tampering · GraphQL Testing
- │     Clickjacking · Rate Limit Check · Plugins
+ ├── P2 — RECON ATIVO (INFRA)
+ │     Nmap Stealth Scan · Enumeração de Subdomínios · SSL/TLS Analyzer
  │
- └── Pipeline 3 — IA
-       JWT Analyzer (alg:none · segredo fraco · claims sensíveis)
-       IDOR Detection · Secret Scanner (12+ padrões)
-       XSS · SQLi · SSRF · Form Testing
-       Risk Engine · Learning Engine · Insights automáticos
-       PDF Report + HTML Dashboard
+ ├── P3 — SCANNER WEB & API
+ │     WAF Fingerprint · JWT (alg:none/secrets) · GraphQL Introspection
+ │     IDOR Tester · Clickjacking · Rate Limit · Security Headers
+ │
+ ├── P4 — AGRESSIVO (CRAWLER)
+ │     Deep Crawler · JS Endpoint Extraction · Sensitive Paths · Sitemap
+ │
+ ├── P5 — ATTACK ENGINE (DAST)
+ │     Validação de XSS/SQLi · Path Traversal Real · Auth Attacker
+ │
+ ├── P6 — AI LOGIC ENGINE
+ │     Risk Engine (Severidade) · Learning Engine (JSON Persistence)
+ │
+ └── P7 — GEMINI OVERWATCH
+       Master Correlation · Redução de Falsos Positivos · Business Insights
 ```
 
 ---
