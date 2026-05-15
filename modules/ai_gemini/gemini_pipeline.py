@@ -257,3 +257,154 @@ def run_offensive_ai(scan_results: dict) -> dict:
 def run_gemini_overwatch(scan_results: dict) -> dict:
     """Fallback legadado para manter compatibilidade."""
     return run_offensive_ai(scan_results)
+
+
+# ─── Pipeline API Security Analysis ────────────────────────────────────────
+
+API_SECURITY_SYSTEM_PROMPT = """\
+Você é um **Hacker Especialista em APIs** com mais de 15 anos de experiência em \
+testes de intrusão focados em arquiteturas REST e GraphQL.
+
+Você receberá o schema/especificação (Swagger/OpenAPI ou similar) de uma API.  
+Seu objetivo é identificar a **falha arquitetural ou de lógica de negócio mais \
+crítica** presente no schema — exemplos: IDOR, BOLA (Broken Object-Level Authorization), \
+falhas de JWT (algorithm confusion, ausência de validação de assinatura, claims \
+manipuláveis), Mass Assignment, SSRF via parâmetros, Excessive Data Exposure, \
+falta de rate-limiting em endpoints sensíveis, etc.
+
+Retorne EXCLUSIVAMENTE um JSON válido com DUAS chaves:
+
+```json
+{
+  "insight": "<Explicação detalhada da falha arquitetural ou de lógica de negócio encontrada, incluindo o endpoint afetado e o impacto>",
+  "payload": "<Comando CURL completo ou payload JSON exato, pronto para ser disparado contra a API para validar a falha>"
+}
+```
+
+### Regras:
+1. NÃO inclua texto fora do JSON. NENHUMA explicação adicional, NENHUM comentário.
+2. O `payload` deve ser um comando CURL completo e funcional OU um payload JSON exato, \
+   tecnicamente preciso para explorar a falha identificada.
+3. Se o schema não apresentar falhas evidentes, ainda assim retorne o JSON, \
+   colocando no `insight` a explicação de por que o schema parece seguro e no `payload` \
+   um exemplo de teste de validação de segurança que poderia ser feito.
+4. APENAS JSON VÁLIDO. NADA MAIS.
+"""
+
+
+def analyze_api_security(api_schema_text: str) -> dict:
+    """
+    Analisa o schema de uma API usando o Gemini como Hacker Especialista.
+
+    Args:
+        api_schema_text: Texto do schema/especificação da API (Swagger, OpenAPI, etc.)
+
+    Returns:
+        dict com as chaves 'insight' e 'payload', ou dict de erro.
+    """
+    api_key = os.getenv("GEMINI_API_KEY", "AIzaSyCQgAZkq1OLZvq7ISHCWM2-1hS_e8dIuxk")
+
+    if not api_key:
+        print_status("⚠  GEMINI_API_KEY não definida. Análise de API impossível.", "WARN")
+        return {"error": "GEMINI_API_KEY não configurada", "insight": None, "payload": None}
+
+    # Inicializa o cliente Gemini
+    try:
+        client = genai.Client(api_key=api_key)
+    except Exception as exc:
+        print_status(f"Erro ao inicializar Gemini para API Security: {exc}", "ERROR")
+        return {"error": str(exc), "insight": None, "payload": None}
+
+    # Monta o prompt do usuário com o schema
+    user_prompt = (
+        "Analise o schema de API abaixo como um Hacker Especialista. "
+        "Encontre a falha mais crítica e retorne o JSON conforme instruído.\n\n"
+        f"```json\n{api_schema_text}\n```"
+    )
+
+    print_status("Enviando schema para análise do Gemini (API Security)...", "INFO")
+
+    try:
+        config = types.GenerateContentConfig(
+            system_instruction=API_SECURITY_SYSTEM_PROMPT,
+            temperature=0.3,
+            safety_settings=[
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+            ],
+            response_mime_type="application/json",
+        )
+
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=user_prompt,
+            config=config,
+        )
+
+        if not response or not response.text:
+            print_status("Gemini retornou resposta vazia na análise de API.", "WARN")
+            return {"error": "Resposta vazia do Gemini", "insight": None, "payload": None}
+
+        # ── Parse robusto do JSON retornado ──────────────────────────────
+        raw_text = response.text.strip()
+
+        # Remove cercas de markdown (```json ... ```)
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[-1]
+        if raw_text.endswith("```"):
+            raw_text = raw_text.rsplit("```", 1)[0]
+        raw_text = raw_text.strip()
+
+        # Tenta o parse primário
+        try:
+            result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            # Fallback: tenta extrair o primeiro bloco JSON válido do texto
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', raw_text)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group())
+                except json.JSONDecodeError as jde:
+                    print_status(f"Falha total no parse do JSON do Gemini: {jde}", "ERROR")
+                    log.error(f"Raw response:\n{raw_text[:500]}")
+                    return {
+                        "error": f"JSON inválido: {jde}",
+                        "raw_response": raw_text[:1000],
+                        "insight": None,
+                        "payload": None,
+                    }
+            else:
+                print_status("Nenhum bloco JSON encontrado na resposta do Gemini.", "ERROR")
+                return {
+                    "error": "Nenhum JSON encontrado na resposta",
+                    "raw_response": raw_text[:1000],
+                    "insight": None,
+                    "payload": None,
+                }
+
+        # Valida presença das chaves obrigatórias
+        insight = result.get("insight")
+        payload = result.get("payload")
+
+        if not insight or not payload:
+            print_status("Gemini retornou JSON sem 'insight' e/ou 'payload'.", "WARN")
+            return {
+                "error": "Chaves 'insight' e/ou 'payload' ausentes",
+                "raw_result": result,
+                "insight": insight,
+                "payload": payload,
+            }
+
+        print_status("Análise de API Security concluída com sucesso!", "SUCCESS")
+        return {"insight": insight, "payload": payload}
+
+    except json.JSONDecodeError as jde:
+        print_status(f"Gemini retornou JSON inválido: {jde}", "ERROR")
+        return {"error": f"JSON inválido: {jde}", "insight": None, "payload": None}
+    except Exception as exc:
+        print_status(f"Erro na análise de API Security do Gemini: {exc}", "ERROR")
+        log.exception("Gemini API Security error")
+        return {"error": str(exc), "insight": None, "payload": None}
