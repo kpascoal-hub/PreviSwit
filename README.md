@@ -1,6 +1,6 @@
 
 # 🛡️ PreviSwit
-### AI-Powered Pentest Framework
+### AI-Powered ASPM
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-orange?style=for-the-badge&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
