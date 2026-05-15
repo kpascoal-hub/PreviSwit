@@ -15,7 +15,7 @@ Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 
 ---
 
-## 📸 Preview
+## Preview
 
   
 ```
@@ -47,7 +47,7 @@ Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML. `Mbmo   
       
    ┌────────────────────────────────────────────────────────────────────────────────┐
-   │   # PreviSwit v1.0 - ASPM and Power Throttling management tool for Windows     │ 
+   │   # PreviSwit v1.0 - ASPM and AI-powered security management tools             │ 
    │   # Developed by: PreviSwit Team                                               │                      
    └────────────────────────────────────────────────────────────────────────────────┘
     
@@ -55,7 +55,7 @@ o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML
 
 ---
 
-## ✨ O que é
+## O que é?
 
 O **PreviSwit** é um framework de pentest automatizado construído do zero em Python, com foco em:
 
