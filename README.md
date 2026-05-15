@@ -10,7 +10,8 @@
 **Framework de pentest automatizado com IA integrada, 3 pipelines independentes e relatório profissional.**  
 Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 
-> ⚠️ **USO EXCLUSIVO EM ALVOS COM AUTORIZAÇÃO ESCRITA. Segurança ofensiva responsável.**
+> ⚠️ **USO EXCLUSIVO EM ALVOS COM AUTORIZAÇÃO ESCRITA**
+> **QUAISQUER ATAQUES REALIZADOS SEM O CONSENTIMENTO PRÉVIO DO PROPRIETÁRIO DO SISTEMA SÃO ILEGAIS E SUJEITOS ÀS PENALIDADES DA LEI**
 
 
 ---
