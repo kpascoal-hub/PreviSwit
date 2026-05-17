@@ -69,36 +69,6 @@ O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management)
 
 ---
 
-## 🏗️ Arquitetura — 3 Pipelines
-
-```
-main.py
- │
- ├── P1 — RECON PASSIVO (OSINT)
- │     WHOIS · DNS · Shodan · InternetDB · VirusTotal · Google Dorks
- │
- ├── P2 — RECON ATIVO (INFRA)
- │     Nmap Stealth Scan · Enumeração de Subdomínios · SSL/TLS Analyzer
- │
- ├── P3 — SCANNER WEB & API
- │     WAF Fingerprint · JWT (alg:none/secrets) · GraphQL Introspection
- │     IDOR Tester · Clickjacking · Rate Limit · Security Headers
- │
- ├── P4 — AGRESSIVO (CRAWLER)
- │     Deep Crawler · JS Endpoint Extraction · Sensitive Paths · Sitemap
- │
- ├── P5 — ATTACK ENGINE (DAST)
- │     Validação de XSS/SQLi · Path Traversal Real · Auth Attacker
- │
- ├── P6 — AI LOGIC ENGINE
- │     Risk Engine (Severidade) · Learning Engine (JSON Persistence)
- │
- └── P7 — GEMINI OVERWATCH
-       Master Correlation · Redução de Falsos Positivos · Business Insights
-```
-
----
-
 ## 🔧 Módulos
 
 | Módulo | O que faz |
@@ -178,6 +148,49 @@ Todos os relatórios são salvos em `reports/`:
 | `<target>_report.json` | Dados completos em JSON para integração com outras ferramentas |
 | `data/results.db` | Histórico de findings em SQLite |
 | `data/ai_memory.json` | Memória da IA — aprende com cada scan |
+
+---
+
+
+## Arquitetura 
+
+```
+                   ┌────────────────────┐
+                   │    WEB DASHBOARD   │
+                   │ React / Next.js    │
+                   └─────────┬──────────┘
+                             │
+                    WSS / HTTPS API
+                             │
+┌─────────────────────────────────────────────────────────┐
+│                  CONTROL PLANE (Cloud)                  │
+└──────────────┬──────────────────────────────┬───────────┘
+               │                              │
+         Secure WSS                     REST / GraphQL
+               │                              │
+      ┌────────▼───────┐             ┌────────▼────────┐
+      │ AGENT NODE #01 │             │ MOBILE APP      │
+      │ Linux/Windows  │             │ Flutter/ReactN  │
+      └────────┬───────┘             └─────────────────┘
+               │
+        Local Execution Bus
+               │
+ ┌─────────────┴─────────────────────────────┐
+ │                                           │
+ │ Nmap      Nuclei      Trivy      Custom   │
+ │ Scanner   Engine      Engine     Modules  │
+ │                                           │
+ └─────────────┬─────────────────────────────┘
+               │
+       AI Validation Layer
+               │
+     Ollama / Local LLM
+               │
+    Exploit Verification Sandbox
+               │
+        Remediation Engine
+```
+
 
 ---
 
