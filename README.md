@@ -143,9 +143,9 @@ Todos os relatórios são salvos em `reports/`:
 
 | Arquivo | Descrição |
 |---------|-----------|
-| `<target>_report.pdf` | Relatório técnico profissional com gráfico de severidade, score de segurança, CVSS por finding, impacto e recomendações |
 | `<target>_dashboard.html` | Dashboard interativo com Chart.js, filtros por severidade, tabela de findings, secrets, CVEs e stack tecnológico |
 | `<target>_report.json` | Dados completos em JSON para integração com outras ferramentas |
+| `<target>_report.pdf` | Relatório técnico profissional com gráfico de severidade, score de segurança, CVSS por finding, impacto e recomendações |
 | `data/results.db` | Histórico de findings em SQLite |
 | `data/ai_memory.json` | Memória da IA — aprende com cada scan |
 
