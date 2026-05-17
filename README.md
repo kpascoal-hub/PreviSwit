@@ -66,6 +66,20 @@ O **PreviSwit** é um framework de pentest automatizado construído do zero em P
 - **Arquitetura modular** — plugins extensíveis, 3 pipelines independentes
 - **Sem dependência de licença** — 100% open source, sem pagar Burp Pro
 
+## O que é?
+
+O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management) com agente local de segurança automatizada, desenvolvida em Python.
+
+#### A solução combina:
+
+- descoberta de ativos,
+- análise contínua de vulnerabilidades,
+- correlação inteligente de findings,
+- validação automatizada,
+- priorização baseada em risco,
+- e geração assistida de remediação.
+
+
 ---
 
 ## 🏗️ Arquitetura — 3 Pipelines
