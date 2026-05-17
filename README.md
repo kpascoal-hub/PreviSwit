@@ -69,7 +69,7 @@ O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management)
 
 ---
 
-## 🔧 Módulos
+## Módulos
 
 | Módulo | O que faz |
 |--------|-----------|
@@ -96,7 +96,7 @@ O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management)
 
 ---
 
-## 🚀 Instalação
+## Instalação
 
 ```bash
 # Clone o repositório
@@ -113,7 +113,7 @@ pip install -r requirements.txt
 
 ---
 
-## ⚙️ Uso
+## Uso
 
 ```bash
 # Scan completo — todos os pipelines
@@ -137,7 +137,7 @@ python main.py http://target.com --no-aggressive
 
 ---
 
-## 📊 Outputs
+## Outputs
 
 Todos os relatórios são salvos em `reports/`:
 
@@ -194,7 +194,7 @@ Todos os relatórios são salvos em `reports/`:
 
 ---
 
-## 🧩 Criando Plugins
+## Criando Plugins
 
 Crie um arquivo em `modules/plugins/` herdando `BasePlugin`:
 
@@ -219,7 +219,7 @@ O loader detecta automaticamente. Sem configuração extra.
 
 ---
 
-## 🔑 API Keys (opcionais)
+## API Keys (opcionais)
 
 | Serviço | Sem key | Com key |
 |---------|---------|---------|
@@ -228,7 +228,7 @@ O loader detecta automaticamente. Sem configuração extra.
 
 ---
 
-## 📦 Dependências principais
+## Dependências principais
 
 ```
 requests · beautifulsoup4 · lxml · dnspython
