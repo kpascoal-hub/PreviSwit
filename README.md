@@ -58,27 +58,14 @@ o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML
 
 ## O que é?
 
-O **PreviSwit** é um framework de pentest automatizado construído do zero em Python, com foco em:
-
-- **Cobertura ampla** — do recon passivo até exploração de vulnerabilidades
-- **IA integrada** — priorização inteligente, memória histórica e insights automáticos
-- **Relatório profissional** — PDF com gráficos, CVSS scores e dashboard HTML interativo
-- **Arquitetura modular** — plugins extensíveis, 3 pipelines independentes
-- **Sem dependência de licença** — 100% open source, sem pagar Burp Pro
-
-## O que é?
-
 O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management) com agente local de segurança automatizada, desenvolvida em Python.
 
 #### A solução combina:
-
-- descoberta de ativos,
-- análise contínua de vulnerabilidades,
-- correlação inteligente de findings,
-- validação automatizada,
-- priorização baseada em risco,
-- e geração assistida de remediação.
-
+- **Relatório profissional** — PDF com gráficos, CVSS scores e dashboard HTML interativo
+- **Arquitetura modular** — plugins extensíveis, 3 pipelines independentes
+- **IA integrada** — priorização inteligente, memória histórica e insights automáticos
+- **Sem dependência de licença** — 100% open source, sem pagar Burp Pro
+- **Cobertura ampla** — do recon passivo até exploração de vulnerabilidades
 
 ---
 
