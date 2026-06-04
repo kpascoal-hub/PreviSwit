@@ -1,0 +1,53 @@
+# =============================================================================
+# Dockerfile — previswit-agent
+# Base: Kali Linux Rolling | Framework de Pentest
+# Ferramentas: Nmap, Gobuster, Nuclei, Trivy + Python 3
+# =============================================================================
+FROM kalilinux/kali-rolling:latest
+
+LABEL maintainer="PreviSwit Team" \
+      description="PreviSwit Agent — AI-Powered Pentest Framework"
+
+# Instala ferramentas de pentest e Python
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-lxml \
+        nmap \
+        gobuster \
+        curl \
+        wget \
+        git \
+        ca-certificates \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instala Nuclei (última versão via GitHub Releases)
+RUN NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest \
+        | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && curl -sSfL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" \
+       -o /tmp/nuclei.zip \
+    && unzip /tmp/nuclei.zip -d /usr/local/bin/ \
+    && rm /tmp/nuclei.zip \
+    && chmod +x /usr/local/bin/nuclei
+
+# Instala Trivy (última versão via script oficial)
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+    | sh -s -- -b /usr/local/bin
+
+WORKDIR /app
+
+# Instala dependências Python do agente (permitindo break-system-packages devido ao pip no kali)
+COPY requirements.txt .
+# Remove o lxml do requirements pois o Kali (Python 3.13) falha ao compilar lxml 4.9. O python3-lxml do apt já o resolve.
+RUN sed -i '/lxml/d' requirements.txt && pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Copia código-fonte do agente
+COPY . .
+
+# Cria o diretório de relatórios (será montado como volume)
+RUN mkdir -p /app/reports
+
+# O container fica vivo escutando o WebSocket
+CMD ["python3", "ws_listener.py"]

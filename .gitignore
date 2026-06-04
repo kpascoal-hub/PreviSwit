@@ -1,0 +1,22 @@
+# Arquivos de ambiente (NUNCA commitar .env)
+.env
+
+# Relatórios gerados pelo agente
+reports/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Ambientes virtuais
+.venv/
+venv/
+
+# Artefatos Docker
+*.tar
+
+# IDEs
+.vscode/
+.idea/

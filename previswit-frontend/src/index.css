@@ -1,0 +1,45 @@
+/* index.css — Estilos globais PreviSwit ASPM
+ * As páginas HTML carregam o Tailwind via CDN.
+ * Este arquivo contém apenas customizações e resets manuais.
+ * ------------------------------------------------------- */
+
+/* Transição de entrada suave ao carregar a página */
+@keyframes pageFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+body {
+    animation: pageFadeIn 0.3s ease forwards;
+}
+
+/* Reset básico e tipografia */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #060b13;
+    color: #e5e7eb;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utilitários Customizados */
+.glass-panel {
+    background: rgba(17, 24, 39, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    border-radius: 1rem;
+}

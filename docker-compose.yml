@@ -1,0 +1,100 @@
+# =============================================================================
+# PreviSwit AI-ASPM — Docker Compose
+# =============================================================================
+# Requisitos:
+#   - Docker >= 24.x
+#   - Docker Compose >= 2.x  (plugin nativo, use `docker compose`)
+#
+# Uso:
+#   1. Copie .env.example para .env e preencha GEMINI_API_KEY
+#   2. docker compose up --build
+# =============================================================================
+
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  agent_reports:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Redes
+# ---------------------------------------------------------------------------
+networks:
+  previswit-network:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Serviços
+# ---------------------------------------------------------------------------
+services:
+
+  # =========================================================================
+  # previswit-server
+  # FastAPI + WebSockets — servidor central de orquestração
+  # =========================================================================
+  previswit-server:
+    build:
+      context: ./NewPrevy
+      dockerfile: Dockerfile.server
+    container_name: previswit-server
+    restart: unless-stopped
+    ports:
+      - "10000:10000"           
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "10000"
+      SECRET_KEY: "${SECRET_KEY:-changeme-replace-in-production}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      APP_ENV: "${APP_ENV:-production}"
+    networks:
+      - previswit-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  # =========================================================================
+  # previswit-agent
+  # Framework de Pentest (Nmap, Gobuster, Nuclei, Trivy) — escuta via WS
+  # =========================================================================
+  previswit-agent:
+    build:
+      context: ./NewPrevy
+      dockerfile: Dockerfile.agent
+    container_name: previswit-agent
+    restart: unless-stopped
+    command: ["python3", "ws_listener.py"]
+    environment:
+      PREVISWIT_WS_URI: "ws://previswit-server:10000/ws/agent_01"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      REPORTS_DIR: "/app/reports"
+    volumes:
+      - agent_reports:/app/reports
+    networks:
+      - previswit-network
+    depends_on:
+      previswit-server:
+        condition: service_healthy
+
+  # =========================================================================
+  # previswit-frontend
+  # Dashboard Web (React + Vite + Tailwind) -> Produção em Nginx
+  # =========================================================================
+  previswit-frontend:
+    build:
+      context: ./previswit-frontend
+      dockerfile: Dockerfile
+    container_name: previswit-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"     # Porta 3000 no Host acessa a porta 80 do Nginx
+    networks:
+      - previswit-network
+    depends_on:
+      previswit-server:
+        condition: service_healthy

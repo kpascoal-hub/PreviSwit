@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PreviSwit ASPM - Authentication</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #050505;
+            background-image: radial-gradient(circle at 50% 0%, #111827 0%, #050505 70%);
+        }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center font-sans text-gray-200 antialiased selection:bg-blue-500/30">
+
+    <div class="glass-panel w-full max-w-md p-8 sm:p-10 rounded-2xl relative overflow-hidden">
+        <!-- Decoration -->
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
+
+        <div class="mb-10 text-center">
+            <h1 class="text-3xl font-bold tracking-tight text-white mb-2">PreviSwit ASPM</h1>
+            <p class="text-sm text-gray-400 tracking-wide uppercase">System Authentication</p>
+        </div>
+
+        <div id="error-banner" class="hidden mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center font-medium">
+            Invalid credentials provided.
+        </div>
+
+        <form id="login-form" class="space-y-6">
+            <div>
+                <label for="username" class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Identificador</label>
+                <input type="text" id="username" name="username" required autocomplete="off"
+                    class="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    placeholder="ID do utilizador">
+            </div>
+
+            <div>
+                <label for="password" class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Chave de Segurança</label>
+                <input type="password" id="password" name="password" required
+                    class="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    placeholder="••••••••">
+            </div>
+
+            <button type="submit" 
+                class="w-full bg-white text-black font-semibold py-3 px-4 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900 transition-all">
+                Autenticar
+            </button>
+        </form>
+
+        <div class="mt-10 pt-6 border-t border-gray-800 text-center">
+            <p class="text-xs text-gray-500">Notice: All access attempts are strictly monitored.</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const errorBanner = document.getElementById('error-banner');
+
+            if (user === 'admin' && pass === 'admin') {
+                errorBanner.classList.add('hidden');
+                window.location.href = '/dashboard';
+            } else {
+                errorBanner.classList.remove('hidden');
+                // Shake effect
+                const panel = document.querySelector('.glass-panel');
+                panel.animate([
+                    { transform: 'translateX(0)' },
+                    { transform: 'translateX(-10px)' },
+                    { transform: 'translateX(10px)' },
+                    { transform: 'translateX(-10px)' },
+                    { transform: 'translateX(10px)' },
+                    { transform: 'translateX(0)' }
+                ], { duration: 400, easing: 'ease-in-out' });
+            }
+        });
+    </script>
+</body>
+</html>

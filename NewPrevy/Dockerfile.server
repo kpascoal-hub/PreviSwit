@@ -1,0 +1,30 @@
+# =============================================================================
+# Dockerfile — previswit-server
+# Base: Python 3.11 slim | Servidor FastAPI + WebSockets
+# =============================================================================
+FROM python:3.11-slim
+
+# Metadados
+LABEL maintainer="PreviSwit Team" \
+      description="PreviSwit Server — FastAPI + WebSockets"
+
+WORKDIR /app
+
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instala dependências Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copia código-fonte
+COPY . .
+
+# Porta padrão
+EXPOSE 10000
+
+# Ponto de entrada
+CMD ["uvicorn", "api.api:app", "--host", "0.0.0.0", "--port", "10000"]
+
