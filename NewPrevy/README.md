@@ -1,6 +1,6 @@
 
 # 🛡️ PreviSwit
-### AI-Powered Pentest Framework
+### AI-Powered ASPM
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-orange?style=for-the-badge&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
@@ -10,12 +10,13 @@
 **Framework de pentest automatizado com IA integrada, 3 pipelines independentes e relatório profissional.**  
 Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 
-> ⚠️ **USO EXCLUSIVO EM ALVOS COM AUTORIZAÇÃO ESCRITA. Segurança ofensiva responsável.**
+> ⚠️ **USO EXCLUSIVO EM ALVOS COM AUTORIZAÇÃO ESCRITA,**
+> **QUAISQUER ATAQUES REALIZADOS SEM O CONSENTIMENTO PRÉVIO DO PROPRIETÁRIO DO SISTEMA SÃO ILEGAIS E SUJEITOS ÀS PENALIDADES DA LEI**
 
 
 ---
 
-## 📸 Preview
+## Preview
 
   
 ```
@@ -47,7 +48,7 @@ Desenvolvido por **PreviSwit Team** — Engenharia de Software & Cybersecurity.
 o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML. `Mbmo   
       
    ┌────────────────────────────────────────────────────────────────────────────────┐
-   │   # PreviSwit v1.0 - ASPM and Power Throttling management tool for Windows     │ 
+   │   # PreviSwit v1.0 - ASPM and AI-powered security management tools             │ 
    │   # Developed by: PreviSwit Team                                               │                      
    └────────────────────────────────────────────────────────────────────────────────┘
     
@@ -55,49 +56,20 @@ o$$$o        d$$$b    `Y8bod8P'     `8'     o$$$o P"Ybmmd"    W      W     .JMML
 
 ---
 
-## ✨ O que é
+## O que é?
 
-O **PreviSwit** é um framework de pentest automatizado construído do zero em Python, com foco em:
+O **PreviSwit** é uma plataforma ASPM (Application Security Posture Management) com agente local de segurança automatizada, desenvolvida em Python.
 
-- **Cobertura ampla** — do recon passivo até exploração de vulnerabilidades
-- **IA integrada** — priorização inteligente, memória histórica e insights automáticos
+#### A solução combina:
 - **Relatório profissional** — PDF com gráficos, CVSS scores e dashboard HTML interativo
 - **Arquitetura modular** — plugins extensíveis, 3 pipelines independentes
+- **IA integrada** — priorização inteligente, memória histórica e insights automáticos
 - **Sem dependência de licença** — 100% open source, sem pagar Burp Pro
+- **Cobertura ampla** — do recon passivo até exploração de vulnerabilidades
 
 ---
 
-## 🏗️ Arquitetura — 3 Pipelines
-
-```
-main.py
- │
- ├── P1 — RECON PASSIVO (OSINT)
- │     WHOIS · DNS · Shodan · InternetDB · VirusTotal · Google Dorks
- │
- ├── P2 — RECON ATIVO (INFRA)
- │     Nmap Stealth Scan · Enumeração de Subdomínios · SSL/TLS Analyzer
- │
- ├── P3 — SCANNER WEB & API
- │     WAF Fingerprint · JWT (alg:none/secrets) · GraphQL Introspection
- │     IDOR Tester · Clickjacking · Rate Limit · Security Headers
- │
- ├── P4 — AGRESSIVO (CRAWLER)
- │     Deep Crawler · JS Endpoint Extraction · Sensitive Paths · Sitemap
- │
- ├── P5 — ATTACK ENGINE (DAST)
- │     Validação de XSS/SQLi · Path Traversal Real · Auth Attacker
- │
- ├── P6 — AI LOGIC ENGINE
- │     Risk Engine (Severidade) · Learning Engine (JSON Persistence)
- │
- └── P7 — GEMINI OVERWATCH
-       Master Correlation · Redução de Falsos Positivos · Business Insights
-```
-
----
-
-## 🔧 Módulos
+## Módulos
 
 | Módulo | O que faz |
 |--------|-----------|
@@ -124,7 +96,7 @@ main.py
 
 ---
 
-## 🚀 Instalação
+## Instalação
 
 ```bash
 # Clone o repositório
@@ -141,7 +113,7 @@ pip install -r requirements.txt
 
 ---
 
-## ⚙️ Uso
+## Uso
 
 ```bash
 # Scan completo — todos os pipelines
@@ -165,21 +137,64 @@ python main.py http://target.com --no-aggressive
 
 ---
 
-## 📊 Outputs
+## Outputs
 
 Todos os relatórios são salvos em `reports/`:
 
 | Arquivo | Descrição |
 |---------|-----------|
-| `<target>_report.pdf` | Relatório técnico profissional com gráfico de severidade, score de segurança, CVSS por finding, impacto e recomendações |
 | `<target>_dashboard.html` | Dashboard interativo com Chart.js, filtros por severidade, tabela de findings, secrets, CVEs e stack tecnológico |
 | `<target>_report.json` | Dados completos em JSON para integração com outras ferramentas |
+| `<target>_report.pdf` | Relatório técnico profissional com gráfico de severidade, score de segurança, CVSS por finding, impacto e recomendações |
 | `data/results.db` | Histórico de findings em SQLite |
 | `data/ai_memory.json` | Memória da IA — aprende com cada scan |
 
 ---
 
-## 🧩 Criando Plugins
+
+## Arquitetura 
+
+```
+                   ┌────────────────────┐
+                   │    WEB DASHBOARD   │
+                   │ React / Next.js    │
+                   └─────────┬──────────┘
+                             │
+                    WSS / HTTPS API
+                             │
+┌─────────────────────────────────────────────────────────┐
+│                  CONTROL PLANE (Cloud)                  │
+└──────────────┬──────────────────────────────┬───────────┘
+               │                              │
+         Secure WSS                     REST / GraphQL
+               │                              │
+      ┌────────▼───────┐             ┌────────▼────────┐
+      │ AGENT NODE #01 │             │ MOBILE APP      │
+      │ Linux/Windows  │             │ Flutter/ReactN  │
+      └────────┬───────┘             └─────────────────┘
+               │
+        Local Execution Bus
+               │
+ ┌─────────────┴─────────────────────────────┐
+ │                                           │
+ │ Nmap      Nuclei      Trivy      Custom   │
+ │ Scanner   Engine      Engine     Modules  │
+ │                                           │
+ └─────────────┬─────────────────────────────┘
+               │
+       AI Validation Layer
+               │
+     Ollama / Local LLM
+               │
+    Exploit Verification Sandbox
+               │
+        Remediation Engine
+```
+
+
+---
+
+## Criando Plugins
 
 Crie um arquivo em `modules/plugins/` herdando `BasePlugin`:
 
@@ -204,7 +219,7 @@ O loader detecta automaticamente. Sem configuração extra.
 
 ---
 
-## 🔑 API Keys (opcionais)
+## API Keys (opcionais)
 
 | Serviço | Sem key | Com key |
 |---------|---------|---------|
@@ -213,7 +228,7 @@ O loader detecta automaticamente. Sem configuração extra.
 
 ---
 
-## 📦 Dependências principais
+## Dependências principais
 
 ```
 requests · beautifulsoup4 · lxml · dnspython
@@ -235,6 +250,7 @@ O autor não se responsabiliza pelo uso indevido.
 
 **PreviSwit Team**  
 Engenharia de Software · Cybersecurity  
+
 ---
 
 <div align="center">
