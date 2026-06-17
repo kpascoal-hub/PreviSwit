@@ -1,30 +1,50 @@
 # =============================================================================
 # Dockerfile — previswit-server
-# Base: Python 3.11 slim | Servidor FastAPI + WebSockets
+# Base: Python 3.11 slim | FastAPI + WebSockets + API REST ASPM
+# Versão: 4.0
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 # Metadados
 LABEL maintainer="PreviSwit Team" \
-      description="PreviSwit Server — FastAPI + WebSockets"
+      description="PreviSwit Server — FastAPI AI-ASPM v4" \
+      version="4.0"
+
+# Variáveis de ambiente Python para comportamento otimizado em containers
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Instala dependências do sistema
+# Instala dependências mínimas do sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala dependências Python
+# ── Dependências Python ──────────────────────────────────────────────────────
+# Copia apenas o requirements primeiro para cache de layer
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia código-fonte
+# ── Código-fonte ─────────────────────────────────────────────────────────────
 COPY . .
 
-# Porta padrão
+# Cria diretórios de dados se não existirem
+RUN mkdir -p /app/data /app/reports
+
+# Porta padrão da API
 EXPOSE 10000
 
-# Ponto de entrada
-CMD ["uvicorn", "api.api:app", "--host", "0.0.0.0", "--port", "10000"]
+# Health check: verifica se a API responde
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+    CMD curl -f http://localhost:10000/ || exit 1
 
+# Ponto de entrada: uvicorn em modo production
+CMD ["uvicorn", "api.api:app", \
+     "--host", "0.0.0.0", \
+     "--port", "10000", \
+     "--workers", "1", \
+     "--log-level", "info"]

@@ -1,40 +1,54 @@
 # =============================================================================
-# PreviSwit AI-ASPM — Docker Compose
+# PreviSwit AI-ASPM — Docker Compose v4
 # =============================================================================
-# Requisitos:
-#   - Docker >= 24.x
-#   - Docker Compose >= 2.x  (plugin nativo, use `docker compose`)
+# Serviços:
+#   previswit-server   → FastAPI + WebSocket Hub (porta 10000)
+#   previswit-agent    → Agente de Pentest Kali (cliente WS)
+#   previswit-frontend → React/Vite + Nginx (porta 3000)
+#
+# Rede: previswit-net (bridge isolada)
+# Volumes: agent_reports, previswit_data
 #
 # Uso:
-#   1. Copie .env.example para .env e preencha GEMINI_API_KEY
-#   2. docker compose up --build
+#   cp .env.example .env  (preencha GEMINI_API_KEY)
+#   docker compose up --build
 # =============================================================================
 
 version: "3.9"
 
 # ---------------------------------------------------------------------------
-# Volumes
+# Volumes nomeados — dados persistidos entre restarts
 # ---------------------------------------------------------------------------
 volumes:
   agent_reports:
     driver: local
+    labels:
+      com.previswit.description: "Relatórios gerados pelo agente de pentest"
+
+  previswit_data:
+    driver: local
+    labels:
+      com.previswit.description: "Dados ASPM: findings, assets, engagements"
 
 # ---------------------------------------------------------------------------
-# Redes
+# Rede isolada — todos os containers se comunicam internamente
 # ---------------------------------------------------------------------------
 networks:
-  previswit-network:
+  previswit-net:
     driver: bridge
+    labels:
+      com.previswit.description: "Rede interna PreviSwit AI-ASPM"
 
 # ---------------------------------------------------------------------------
 # Serviços
 # ---------------------------------------------------------------------------
 services:
 
-  # =========================================================================
+  # ===========================================================================
   # previswit-server
-  # FastAPI + WebSockets — servidor central de orquestração
-  # =========================================================================
+  # FastAPI v4 + WebSocket Hub — API REST + Orquestração de Scans
+  # Porta: 10000 (host) → 10000 (container)
+  # ===========================================================================
   previswit-server:
     build:
       context: ./NewPrevy
@@ -42,26 +56,50 @@ services:
     container_name: previswit-server
     restart: unless-stopped
     ports:
-      - "10000:10000"           
+      - "10000:10000"
     environment:
+      # Servidor
       SERVER_HOST: "0.0.0.0"
       SERVER_PORT: "10000"
-      SECRET_KEY: "${SECRET_KEY:-changeme-replace-in-production}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY}"
       APP_ENV: "${APP_ENV:-production}"
+
+      # Segurança
+      SECRET_KEY: "${SECRET_KEY:-previswit-changeme-replace-in-production}"
+      TOKEN_EXPIRE_MINUTES: "${TOKEN_EXPIRE_MINUTES:-60}"
+
+      # IA
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+
+      # E-mail / Reset de Senha
+      SITE_URL: "${SITE_URL:-http://localhost:3000}"
+      SITE_NAME: "${SITE_NAME:-PreviSwit ASPM}"
+      PASSWORD_RESET_TIMEOUT: "${PASSWORD_RESET_TIMEOUT:-3600}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      EMAIL_FROM: "${EMAIL_FROM:-}"
+
+      # Python
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - previswit_data:/app/data
+      - agent_reports:/app/reports
     networks:
-      - previswit-network
+      - previswit-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:10000/"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 15s
+      start_period: 20s
 
-  # =========================================================================
+  # ===========================================================================
   # previswit-agent
-  # Framework de Pentest (Nmap, Gobuster, Nuclei, Trivy) — escuta via WS
-  # =========================================================================
+  # Framework de Pentest (Kali Linux) — Nmap, Gobuster, Nuclei, Trivy
+  # Escuta comandos do server via WebSocket
+  # ===========================================================================
   previswit-agent:
     build:
       context: ./NewPrevy
@@ -73,18 +111,21 @@ services:
       PREVISWIT_WS_URI: "ws://previswit-server:10000/ws/agent_01"
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       REPORTS_DIR: "/app/reports"
+      PYTHONUNBUFFERED: "1"
     volumes:
       - agent_reports:/app/reports
     networks:
-      - previswit-network
+      - previswit-net
     depends_on:
       previswit-server:
         condition: service_healthy
 
-  # =========================================================================
+  # ===========================================================================
   # previswit-frontend
-  # Dashboard Web (React + Vite + Tailwind) -> Produção em Nginx
-  # =========================================================================
+  # Dashboard React/Vite compilado → servido por Nginx Alpine
+  # Proxy reverso interno: /api/* e /ws/* → previswit-server:10000
+  # Porta: 3000 (host) → 80 (container)
+  # ===========================================================================
   previswit-frontend:
     build:
       context: ./previswit-frontend
@@ -92,9 +133,15 @@ services:
     container_name: previswit-frontend
     restart: unless-stopped
     ports:
-      - "3000:80"     # Porta 3000 no Host acessa a porta 80 do Nginx
+      - "0.0.0.0:3000:80"
     networks:
-      - previswit-network
+      - previswit-net
     depends_on:
       previswit-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

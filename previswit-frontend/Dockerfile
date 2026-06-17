@@ -1,37 +1,48 @@
-# ==========================================
-# Fase Única: Servidor Nginx (SPA + MPA)
-# ==========================================
-FROM nginx:alpine
+# =============================================================================
+# Dockerfile — previswit-frontend
+# Estratégia: MPA (Multi-Page App) HTML/CSS servida diretamente por Nginx
+# Sem build step — Tailwind CSS via CDN + index.css customizado
+# =============================================================================
+FROM nginx:1.27-alpine
 
-# Remove página padrão do Nginx
-RUN rm -rf /usr/share/nginx/html/*
+LABEL maintainer="PreviSwit Team" \
+      description="PreviSwit Frontend — MPA Nginx (Cyber Dark)" \
+      version="4.1"
 
-# Copia os arquivos HTML e CSS da pasta src para o diretório padrão do Nginx
-COPY src/*.html src/*.css /usr/share/nginx/html/
+# Remove configuração e conteúdo padrão do Nginx
+RUN rm -rf /usr/share/nginx/html/* \
+    && rm -f /etc/nginx/conf.d/default.conf
 
-# Copia a pasta dashboard (SPA) para um subdiretório dedicado
+# ── Estrutura do servidor:
+#   /usr/share/nginx/html/
+#   ├── index.css           ← Estilos globais (.glass-panel, etc.)
+#   ├── login/              ← Tela de login
+#   │   ├── index.html
+#   │   ├── forgot-password.html
+#   │   └── reset-password.html
+#   └── dashboard/          ← SPA Vanilla JS (todas as views)
+#       ├── index.html      ← Ponto de entrada principal (spa_backup)
+#       ├── analytics.html
+#       ├── compliance.html
+#       ├── pipelines.html
+#       └── reports.html
+# ────────────────────────────────────────────────────────────────────────────
+
+# Copia o CSS global na raiz (para que ../index.css resolva corretamente)
+COPY src/index.css /usr/share/nginx/html/index.css
+
+# Copia a pasta login completa
+COPY src/login/ /usr/share/nginx/html/login/
+
+# Copia a pasta dashboard completa
 COPY src/dashboard/ /usr/share/nginx/html/dashboard/
 
-# Configura o Nginx: raiz aponta para login.html, /dashboard serve a SPA
-RUN printf 'server {\n\
-    listen 80;\n\
-    root /usr/share/nginx/html;\n\
-    index login.html;\n\
-\n\
-    location / {\n\
-        try_files $uri $uri/ /login.html;\n\
-    }\n\
-\n\
-    location /dashboard {\n\
-        return 301 /dashboard/;\n\
-    }\n\
-\n\
-    location /dashboard/ {\n\
-        index index.html;\n\
-        try_files $uri /dashboard/index.html;\n\
-    }\n\
-}' > /etc/nginx/conf.d/default.conf
+# Copia o nginx.conf dedicado
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

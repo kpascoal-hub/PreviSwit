@@ -1,19 +1,65 @@
 """
-API REST — PreviSwit v3
-Expõe os resultados via FastAPI para integração com outros sistemas.
+API REST — PreviSwit AI-ASPM v4
+Expõe todos os domínios ASPM via FastAPI: Assets, Engagements, Findings,
+AI Insights, Risk Metrics, Reports, Integrations e Settings.
 """
 import json, os, glob
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict
+
+# ─── Routers ─────────────────────────────────────────────────────────────────
+from api.routers.auth         import router as auth_router
+from api.routers.assets       import router as assets_router
+from api.routers.engagements  import router as engagements_router
+from api.routers.findings     import router as findings_router
+from api.routers.ai_insights  import router as ai_router
+from api.routers.risk         import router as risk_router
+from api.routers.reports      import router as reports_router
+from api.routers.integrations import router as integrations_router
+from api.routers.settings     import router as settings_router
 from config import Config
 
 app = FastAPI(
-    title="PreviSwit API",
-    description="AI-Powered Pentest Framework — PreviSwit",
-    version="3.0"
+    title="PreviSwit AI-ASPM API",
+    description=(
+        "## PreviSwit — AI-Powered Application Security Posture Management\n\n"
+        "Plataforma ASPM de elite com módulos de:\n"
+        "- **Assets & Products**: Inventário de ativos digitais\n"
+        "- **Engagements & Scans**: Histórico e orquestração de scans\n"
+        "- **Findings**: Central de triagem com deduplicação por IA\n"
+        "- **AI Insights**: Recomendações Gemini, Threat Intel e Chat\n"
+        "- **Risk Metrics**: Score evolutivo e compliance\n"
+        "- **Reports**: Relatórios executivos e técnicos\n"
+        "- **Integrations**: CI/CD, Jira, Slack e mais\n"
+        "- **Settings**: Usuários, RBAC e auditoria"
+    ),
+    version="4.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
+
+# ─── CORS ────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─── Registrar Routers ───────────────────────────────────────────────────────
+app.include_router(auth_router)
+app.include_router(assets_router,       prefix="/api/v1", tags=["Assets & Products"])
+app.include_router(engagements_router,  prefix="/api/v1", tags=["Engagements & Scans"])
+app.include_router(findings_router,     prefix="/api/v1", tags=["Findings & Triage"])
+app.include_router(ai_router,           prefix="/api/v1", tags=["AI & Insights"])
+app.include_router(risk_router,         prefix="/api/v1", tags=["Risk & Posture"])
+app.include_router(reports_router,      prefix="/api/v1", tags=["Reports"])
+app.include_router(integrations_router, prefix="/api/v1", tags=["Integrations"])
+app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
 
 
 class ScanRequest(BaseModel):

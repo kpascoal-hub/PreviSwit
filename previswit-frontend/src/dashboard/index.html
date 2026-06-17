@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PreviSwit ASPM - Console</title>
+    <!-- FRONTEND PERIMETER DEFENSE: Route Guard -->
+    <script>
+        if (sessionStorage.getItem('previswit_auth') !== 'secure_token_active') {
+            window.location.replace('/login/');
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="../index.css">
     <style>
@@ -115,6 +121,38 @@
                     Relatórios
                 </button>
 
+                <!-- Separador -->
+                <div class="my-2 border-t border-white/5"></div>
+                <p class="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">Gestão</p>
+
+                <button onclick="switchView('view-assets')" id="btn-view-assets" class="nav-item">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V6a3 3 0 013-3h13.5a3 3 0 013 3v5.25a3 3 0 01-3 3m-16.5 0h16.5m-1.41 0a3 3 0 00.615-1.875V11.25m-16.5 0V12.375c0 .69.446 1.302 1.115 1.5" />
+                    </svg>
+                    Ativos & Produtos
+                </button>
+
+                <button onclick="switchView('view-findings')" id="btn-view-findings" class="nav-item">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                    </svg>
+                    Central de Findings
+                </button>
+
+                <button onclick="switchView('view-integrations')" id="btn-view-integrations" class="nav-item">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 01-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 00-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 01-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 00.657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 01-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.401.604-.401.959v0c0 .333.277.599.61.58a48.1 48.1 0 005.427-.63 48.05 48.05 0 00.582-4.717.532.532 0 00-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.959.401v0a.656.656 0 00.658-.663 48.422 48.422 0 00-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 01-.61-.58v0z"/>
+                    </svg>
+                    Integrações
+                </button>
+
+                <button onclick="switchView('view-settings')" id="btn-view-settings" class="nav-item">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Configurações
+                </button>
+
             </nav>
 
             <!-- Footer da Sidebar -->
@@ -128,7 +166,7 @@
                     <span class="text-xs text-gray-500">Console Conectado</span>
                 </div>
                 <!-- Sair -->
-                <button onclick="window.location.href='../login.html'" class="nav-item text-gray-500 hover:text-red-400 hover:bg-red-500/10 hover:border-transparent">
+                <button onclick="sessionStorage.removeItem('previswit_auth'); window.location.replace('/login/');" class="nav-item text-gray-500 hover:text-red-400 hover:bg-red-500/10 hover:border-transparent">
                     <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
                     </svg>
@@ -230,6 +268,175 @@
                 </div>
             </section>
 
+            <!-- VIEW: Ativos & Produtos -->
+            <section id="view-assets" class="view-section hidden h-full flex flex-col p-8">
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">Ativos & Produtos</h2>
+                    <p class="text-sm text-gray-500 mt-1">Inventário de ativos digitais e produtos enriquecido por IA.</p>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total de Ativos</p>
+                        <p class="text-3xl font-bold text-white" id="stat-assets-total">—</p>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Ativos Críticos</p>
+                        <p class="text-3xl font-bold text-red-400" id="stat-assets-critical">—</p>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Superfície de Ataque</p>
+                        <p class="text-3xl font-bold text-orange-400" id="stat-assets-surface">—</p>
+                    </div>
+                </div>
+                <div class="flex-1 min-h-0 bg-[#0d1421] border border-white/5 rounded-xl overflow-auto">
+                    <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                        <p class="text-sm font-semibold text-gray-300">Lista de Ativos</p>
+                        <button onclick="loadAssets()" class="text-xs bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg hover:bg-indigo-600/40 transition-colors">↻ Atualizar</button>
+                    </div>
+                    <div id="assets-table" class="p-4 text-sm text-gray-500 text-center py-12">Clique em Atualizar para carregar os ativos</div>
+                </div>
+            </section>
+
+            <!-- VIEW: Central de Findings -->
+            <section id="view-findings" class="view-section hidden h-full flex flex-col p-8">
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">Central de Findings</h2>
+                    <p class="text-sm text-gray-500 mt-1">Triagem unificada de vulnerabilidades com deduplicação por IA.</p>
+                </div>
+                <div class="grid grid-cols-5 gap-3 mb-6">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+                        <p class="text-xs text-red-400 uppercase tracking-wider mb-1">Crítico</p>
+                        <p class="text-2xl font-bold text-red-300" id="stat-critical">—</p>
+                    </div>
+                    <div class="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center">
+                        <p class="text-xs text-orange-400 uppercase tracking-wider mb-1">Alto</p>
+                        <p class="text-2xl font-bold text-orange-300" id="stat-high">—</p>
+                    </div>
+                    <div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
+                        <p class="text-xs text-yellow-400 uppercase tracking-wider mb-1">Médio</p>
+                        <p class="text-2xl font-bold text-yellow-300" id="stat-medium">—</p>
+                    </div>
+                    <div class="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+                        <p class="text-xs text-green-400 uppercase tracking-wider mb-1">Baixo</p>
+                        <p class="text-2xl font-bold text-green-300" id="stat-low">—</p>
+                    </div>
+                    <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-center">
+                        <p class="text-xs text-blue-400 uppercase tracking-wider mb-1">Info</p>
+                        <p class="text-2xl font-bold text-blue-300" id="stat-info">—</p>
+                    </div>
+                </div>
+                <div class="flex-1 min-h-0 bg-[#0d1421] border border-white/5 rounded-xl overflow-auto">
+                    <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                        <p class="text-sm font-semibold text-gray-300">Findings Abertos</p>
+                        <button onclick="loadFindings()" class="text-xs bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg hover:bg-indigo-600/40 transition-colors">↻ Atualizar</button>
+                    </div>
+                    <div id="findings-table" class="p-4 text-sm text-gray-500 text-center py-12">Clique em Atualizar para carregar os findings</div>
+                </div>
+            </section>
+
+            <!-- VIEW: Integrações -->
+            <section id="view-integrations" class="view-section hidden h-full flex flex-col p-8">
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">Integrações</h2>
+                    <p class="text-sm text-gray-500 mt-1">Ferramentas de scan, CI/CD, ITSM e notificações.</p>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-lg">🔗</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">GitHub Actions</p>
+                            <p class="text-xs text-gray-500">CI/CD Pipeline</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full">Ativo</span>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-lg">🎫</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">Jira</p>
+                            <p class="text-xs text-gray-500">Gestão de Issues</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-gray-500/15 text-gray-400 border border-gray-500/25 px-2 py-1 rounded-full">Inativo</span>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-lg">💬</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">Slack</p>
+                            <p class="text-xs text-gray-500">Alertas em Tempo Real</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-gray-500/15 text-gray-400 border border-gray-500/25 px-2 py-1 rounded-full">Inativo</span>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-lg">🔍</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">Nuclei</p>
+                            <p class="text-xs text-gray-500">Scanner de Vulnerabilidades</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full">Ativo</span>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center text-lg">🛡️</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">Trivy</p>
+                            <p class="text-xs text-gray-500">Scanner de Containers</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full">Ativo</span>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-5 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-green-600/20 border border-green-500/30 flex items-center justify-center text-lg">🗺️</div>
+                        <div>
+                            <p class="text-sm font-semibold text-white">Nmap</p>
+                            <p class="text-xs text-gray-500">Scanner de Rede</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full">Ativo</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Configurações -->
+            <section id="view-settings" class="view-section hidden h-full flex flex-col p-8">
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">Configurações</h2>
+                    <p class="text-sm text-gray-500 mt-1">Configurações da plataforma, usuários e controle de acesso.</p>
+                </div>
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-6">
+                        <h3 class="text-sm font-semibold text-gray-300 mb-4">Organização</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Nome da Organização</label>
+                                <input type="text" value="PreviSwit Organization" class="w-full bg-[#060b13] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Timezone</label>
+                                <input type="text" value="America/Sao_Paulo" class="w-full bg-[#060b13] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-6">
+                        <h3 class="text-sm font-semibold text-gray-300 mb-4">Usuários & RBAC</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between py-2 border-b border-white/5">
+                                <div>
+                                    <p class="text-sm text-white">admin</p>
+                                    <p class="text-xs text-gray-500">Administrador do Sistema</p>
+                                </div>
+                                <span class="text-xs bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 px-2 py-1 rounded-full">admin</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-[#0d1421] border border-white/5 rounded-xl p-6 col-span-2">
+                        <h3 class="text-sm font-semibold text-gray-300 mb-4">API & Integrações</h3>
+                        <div class="flex items-center justify-between py-2">
+                            <div>
+                                <p class="text-sm text-white">API REST (PreviSwit Server)</p>
+                                <p class="text-xs text-gray-500 font-mono">http://localhost:10000</p>
+                            </div>
+                            <span class="text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full" id="api-status-badge">Verificando...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
 
         <!-- Footer -->
@@ -244,14 +451,60 @@
 <!-- LÓGICA SPA — VANILLA JS                                       -->
 <!-- ============================================================ -->
 <script>
-    const VIEWS = ['view-overview', 'view-pipelines', 'view-analytics', 'view-compliance', 'view-reports'];
+    const VIEWS = ['view-overview', 'view-pipelines', 'view-analytics', 'view-compliance', 'view-reports', 'view-assets', 'view-findings', 'view-integrations', 'view-settings'];
     const TITLES = {
-        'view-overview':   'Visão Geral',
-        'view-pipelines':  'Pipelines',
-        'view-analytics':  'IA Analytics',
-        'view-compliance': 'Conformidade',
-        'view-reports':    'Relatórios',
+        'view-overview':      'Visão Geral',
+        'view-pipelines':     'Pipelines',
+        'view-analytics':     'IA Analytics',
+        'view-compliance':    'Conformidade',
+        'view-reports':       'Relatórios',
+        'view-assets':        'Ativos & Produtos',
+        'view-findings':      'Central de Findings',
+        'view-integrations':  'Integrações',
+        'view-settings':      'Configurações',
     };
+
+    const API = 'http://localhost:10000/api/v1';
+
+    async function loadAssets() {
+        const el = document.getElementById('assets-table');
+        el.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
+        try {
+            const res = await fetch(API + '/assets/');
+            const data = await res.json();
+            if (!data.length) { el.innerHTML = '<p class="text-gray-600 text-sm">Nenhum ativo cadastrado ainda.</p>'; return; }
+            el.innerHTML = data.map(a => `<div class="flex items-center justify-between py-3 border-b border-white/5 px-2"><div><p class="text-sm text-white font-medium">${a.name}</p><p class="text-xs text-gray-500">${a.asset_type || 'N/A'} · ${a.host || ''}</p></div><span class="text-xs px-2 py-1 rounded-full border ${a.criticality === 'CRITICAL' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}">${a.criticality || 'N/A'}</span></div>`).join('');
+            document.getElementById('stat-assets-total').textContent = data.length;
+            document.getElementById('stat-assets-critical').textContent = data.filter(a => a.criticality === 'CRITICAL').length;
+            document.getElementById('stat-assets-surface').textContent = data.length;
+        } catch(e) { el.innerHTML = '<p class="text-red-400 text-xs">Erro ao conectar com a API.</p>'; }
+    }
+
+    async function loadFindings() {
+        const el = document.getElementById('findings-table');
+        el.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
+        try {
+            const res = await fetch(API + '/findings/');
+            const data = await res.json();
+            const counts = { CRITICAL:0, HIGH:0, MEDIUM:0, LOW:0, INFO:0 };
+            if (!data.length) { el.innerHTML = '<p class="text-gray-600 text-sm">Nenhum finding cadastrado ainda.</p>'; }
+            else {
+                data.forEach(f => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+                el.innerHTML = data.slice(0, 20).map(f => { const colors = {CRITICAL:'text-red-400 border-red-500/20 bg-red-500/10', HIGH:'text-orange-400 border-orange-500/20 bg-orange-500/10', MEDIUM:'text-yellow-400 border-yellow-500/20 bg-yellow-500/10', LOW:'text-green-400 border-green-500/20 bg-green-500/10', INFO:'text-blue-400 border-blue-500/20 bg-blue-500/10'}; const c = colors[f.severity] || colors.INFO; return `<div class="flex items-center justify-between py-3 border-b border-white/5 px-2"><div class="flex-1 min-w-0"><p class="text-sm text-white font-medium truncate">${f.title}</p><p class="text-xs text-gray-500">${f.tool || 'Manual'} · ${f.status || 'open'}</p></div><span class="ml-3 shrink-0 text-xs px-2 py-1 rounded-full border ${c}">${f.severity}</span></div>`; }).join('');
+            }
+            ['critical','high','medium','low','info'].forEach(s => { document.getElementById('stat-'+s).textContent = counts[s.toUpperCase()] || 0; });
+        } catch(e) { el.innerHTML = '<p class="text-red-400 text-xs">Erro ao conectar com a API.</p>'; }
+    }
+
+    // Verifica status da API ao entrar em Configurações
+    async function checkApiStatus() {
+        const badge = document.getElementById('api-status-badge');
+        if (!badge) return;
+        try {
+            await fetch('http://localhost:10000/');
+            badge.textContent = 'Online'; badge.className = 'text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-1 rounded-full';
+        } catch { badge.textContent = 'Offline'; badge.className = 'text-xs bg-red-500/15 text-red-400 border border-red-500/25 px-2 py-1 rounded-full'; }
+    }
 
     function switchView(viewId) {
         // 1. Esconde todas as sections
@@ -279,6 +532,11 @@
         // 5. Atualiza o título da topbar
         const titleEl = document.getElementById('topbar-title');
         if (titleEl && TITLES[viewId]) titleEl.textContent = TITLES[viewId];
+
+        // 6. Lógicas específicas da view
+        if (viewId === 'view-assets') loadAssets();
+        if (viewId === 'view-findings') loadFindings();
+        if (viewId === 'view-settings') checkApiStatus();
     }
 </script>
 

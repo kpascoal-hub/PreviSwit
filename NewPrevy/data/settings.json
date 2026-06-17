@@ -1,0 +1,8 @@
+﻿{
+    "scan_default_pipeline":  "all",
+    "language":  "pt-BR",
+    "sla_enabled":  true,
+    "auto_triage_enabled":  true,
+    "organization_name":  "PreviSwit Organization",
+    "timezone":  "America/Sao_Paulo"
+}
