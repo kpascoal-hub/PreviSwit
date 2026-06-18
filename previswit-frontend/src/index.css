@@ -1,7 +1,8 @@
-/* index.css — Estilos globais PreviSwit ASPM
- * As páginas HTML carregam o Tailwind via CDN.
- * Este arquivo contém apenas customizações e resets manuais.
- * ------------------------------------------------------- */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* index.css — Estilos globais PreviSwit ASPM */
 
 /* Transição de entrada suave ao carregar a página */
 @keyframes pageFadeIn {
