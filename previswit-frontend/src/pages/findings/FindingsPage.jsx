@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API = 'http://localhost:10000/api/v1';
+const API = '/api/v1';
 
 export default function FindingsPage() {
   const [findings, setFindings] = useState([]);
@@ -15,10 +15,10 @@ export default function FindingsPage() {
       const res = await fetch(API + '/findings/');
       if (res.ok) {
         const data = await res.json();
-        setFindings(data);
+        setFindings(data.findings ?? []);
         
         const newCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
-        data.forEach(f => {
+        (data.findings ?? []).forEach(f => {
           if (newCounts[f.severity] !== undefined) newCounts[f.severity]++;
         });
         setCounts(newCounts);

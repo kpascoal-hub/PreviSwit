@@ -4,6 +4,7 @@ Expõe todos os domínios ASPM via FastAPI: Assets, Engagements, Findings,
 AI Insights, Risk Metrics, Reports, Integrations e Settings.
 """
 import json, os, glob
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,7 @@ from api.routers.ai_insights  import router as ai_router
 from api.routers.risk         import router as risk_router
 from api.routers.reports      import router as reports_router
 from api.routers.integrations import router as integrations_router
+from api.routers.aspm_parsers import router as aspm_parsers_router
 from api.routers.settings     import router as settings_router
 from config import Config
 
@@ -59,6 +61,7 @@ app.include_router(ai_router,           prefix="/api/v1", tags=["AI & Insights"]
 app.include_router(risk_router,         prefix="/api/v1", tags=["Risk & Posture"])
 app.include_router(reports_router,      prefix="/api/v1", tags=["Reports"])
 app.include_router(integrations_router, prefix="/api/v1", tags=["Integrations"])
+app.include_router(aspm_parsers_router, prefix="/api/v1", tags=["ASPM Parsers (SAST/Secrets/IaC)"])
 app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
 
 
@@ -105,6 +108,11 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
+
+# ─── Cache global de capabilities reportadas pelo agente ───────────────────────
+# Atualizado toda vez que o agente conecta e envia AGENT_CAPABILITIES.
+# Thread-safe para leitura (GIL Python garante atomicidade de atribuicões de dict).
+_agent_capabilities: dict = {}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -190,7 +198,24 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
             data_str = await websocket.receive_text()
             try:
                 data = json.loads(data_str)
-                # Tudo que o agente falar, a gente repassa pro Dashboard
+
+                # ── Captura AGENT_CAPABILITIES e atualiza o cache global ────────
+                if data.get("action") == "AGENT_CAPABILITIES":
+                    global _agent_capabilities
+                    _agent_capabilities = {
+                        **data.get("data", {}),
+                        "_received_at": datetime.now(timezone.utc).isoformat(),
+                        "_agent_id":    agent_id,
+                    }
+                    import logging
+                    logging.getLogger("api").info(
+                        "✅ AGENT_CAPABILITIES recebido de '%s' — %s ferramentas, %s APIs",
+                        agent_id,
+                        len(_agent_capabilities.get("pentest_tools", [])),
+                        len(_agent_capabilities.get("api_integrations", [])),
+                    )
+
+                # Tudo que o agente falar, repassa pro Dashboard
                 await manager.send_to_dashboard(data)
             except json.JSONDecodeError:
                 pass

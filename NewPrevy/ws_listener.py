@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 
 import websockets
 
+# ─── Módulo de saúde e capacidades ──────────────────────────────────────────
+from modules.system.health import get_agent_capabilities
+
 # ─── Configuração ───────────────────────────────────────────────────────────
 WS_URI = os.getenv(
     "PREVISWIT_WS_URI",
@@ -179,14 +182,34 @@ async def listen_forever():
                 log.info("🟢 Conectado ao servidor!")
                 retry_delay = RETRY_BASE  # reset após conexão bem-sucedida
 
-                # Anuncia presença
+                # ── Handshake: anuncia presença ─────────────────────────────
                 await ws.send(json.dumps({
                     "agent":  AGENT_ID,
                     "status": "online",
                     "ts":     datetime.now(timezone.utc).isoformat(),
                 }))
 
-                # Loop de escuta
+                # ── Dynamic Tool Discovery: reporta capacidades reais ───────
+                # Executa em thread para não bloquear o event-loop durante
+                # chamadas de subprocess (verificação de versões dos binários)
+                log.info("📡 Coletando capabilities do agente…")
+                try:
+                    caps = await asyncio.to_thread(get_agent_capabilities)
+                    await ws.send(json.dumps({
+                        "action": "AGENT_CAPABILITIES",
+                        "agent":  AGENT_ID,
+                        "data":   caps,
+                    }))
+                    active_tools = caps.get("summary", {}).get("active_tools", "?")
+                    active_apis  = caps.get("summary", {}).get("active_apis", "?")
+                    log.info(
+                        "✅ AGENT_CAPABILITIES enviado — %s ferramentas ativas, %s APIs configuradas",
+                        active_tools, active_apis,
+                    )
+                except Exception as caps_err:
+                    log.warning("⚠️  Falha ao coletar capabilities: %s", caps_err)
+
+                # ── Loop de escuta de comandos ──────────────────────────────
                 async for raw_msg in ws:
                     # ── DEBUG: mostra exatamente o que chegou do servidor ──
                     print(f"\n[RECEBIDO DA NUVEM]: {raw_msg}")

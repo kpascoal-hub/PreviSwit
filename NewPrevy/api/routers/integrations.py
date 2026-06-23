@@ -17,6 +17,7 @@ SUPPORTED_INTEGRATIONS = {
     "ticketing": ["jira", "linear", "github_issues", "azure_boards"],
     "notifications": ["slack", "microsoft_teams", "pagerduty", "email"],
     "scan_tools": ["nuclei", "trivy", "owasp_zap", "semgrep", "bandit"],
+    "aspm_tools": ["semgrep", "gitleaks", "checkov"],  # ASPM: SAST / Secrets / IaC
 }
 
 
@@ -41,6 +42,69 @@ def list_integrations():
         "integrations": integrations,
         "total": len(integrations),
         "supported": SUPPORTED_INTEGRATIONS,
+    }
+
+
+@router.get(
+    "/capabilities",
+    summary="Capacidades reais do agente (Dynamic Tool Discovery)",
+    response_description=(
+        "Retorna o estado REAL das ferramentas de pentest instaladas no container "
+        "do agente (via shutil.which) e das integrações de API configuradas (via env vars), "
+        "combinado com as integrações CRUD registradas na plataforma."
+    ),
+    tags=["Integrations"],
+)
+def get_capabilities():
+    """
+    **Dynamic Tool Discovery** — Reflexo em tempo real do motor de pentest.
+
+    Combina três fontes de dados:
+
+    - **pentest_tools**: ferramentas instaladas no container do agente
+      (nmap, nuclei, trivy, gobuster) verificadas via `shutil.which()`.
+    - **api_integrations**: chaves de API configuradas via variáveis de
+      ambiente (Gemini, Jira, Slack, VirusTotal, Shodan).
+    - **configured_integrations**: integrações registradas via CRUD (`POST /integrations`).
+
+    O campo `agent_connected` indica se o agente já enviou suas capabilities
+    desde o último restart do servidor.
+    """
+    # Importa o cache global do módulo pai (sem circular import)
+    from api.api import _agent_capabilities
+
+    agent_connected = bool(_agent_capabilities)
+
+    pentest_tools    = _agent_capabilities.get("pentest_tools", [])
+    api_integrations = _agent_capabilities.get("api_integrations", [])
+    last_seen        = _agent_capabilities.get("_received_at")
+    agent_id         = _agent_capabilities.get("_agent_id")
+    summary          = _agent_capabilities.get("summary", {})
+
+    # Se o agente ainda não conectou, retorna estrutura vazia mas bem-formada
+    if not agent_connected:
+        pentest_tools = [
+            {"id": "nmap",     "name": "Nmap",     "desc": "Scanner de Rede e Portas",              "icon": "🗺️", "color": "green",  "active": False, "path": None, "version": None},
+            {"id": "nuclei",   "name": "Nuclei",   "desc": "Scanner de Vulnerabilidades",           "icon": "🔍", "color": "orange", "active": False, "path": None, "version": None},
+            {"id": "trivy",    "name": "Trivy",    "desc": "Scanner de Containers e SCA",           "icon": "🛡️", "color": "red",    "active": False, "path": None, "version": None},
+            {"id": "gobuster", "name": "Gobuster", "desc": "Enumeração de Diretórios",              "icon": "📂", "color": "yellow", "active": False, "path": None, "version": None},
+        ]
+        api_integrations = [
+            {"id": "gemini",     "name": "Google Gemini", "desc": "Motor de IA Generativa",           "icon": "🤖", "color": "blue",   "active": False},
+            {"id": "jira",       "name": "Jira",          "desc": "Gestão de Issues e Ticketing",     "icon": "🎫", "color": "indigo", "active": False},
+            {"id": "slack",      "name": "Slack",         "desc": "Alertas em Tempo Real",            "icon": "💬", "color": "purple", "active": False},
+            {"id": "virustotal", "name": "VirusTotal",    "desc": "Threat Intelligence e IOCs",       "icon": "🦠", "color": "red",    "active": False},
+            {"id": "shodan",     "name": "Shodan",        "desc": "OSINT / Discovery de Ativos",      "icon": "🌐", "color": "teal",   "active": False},
+        ]
+
+    return {
+        "agent_connected":         agent_connected,
+        "agent_id":                agent_id,
+        "last_seen":               last_seen,
+        "pentest_tools":           pentest_tools,
+        "api_integrations":        api_integrations,
+        "configured_integrations": _load(),
+        "summary":                 summary,
     }
 
 

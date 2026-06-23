@@ -7,7 +7,13 @@
 #   previswit-frontend → React/Vite + Nginx (porta 3000)
 #
 # Rede: previswit-net (bridge isolada)
-# Volumes: agent_reports, previswit_data
+# Volumes:
+#   agent_reports (named)  → Relatórios gerados pelo agente (persistidos)
+#   ./NewPrevy/data (bind) → JSON de dados ASPM (lidos diretamente do disco)
+#
+# IMPORTANTE sobre o bind mount de ./NewPrevy/data:
+#   O container usa os arquivos REAIS do seu projeto.
+#   Qualquer mudança nos JSONs é imediata — sem necessidade de rebuild.
 #
 # Uso:
 #   cp .env.example .env  (preencha GEMINI_API_KEY)
@@ -17,18 +23,16 @@
 version: "3.9"
 
 # ---------------------------------------------------------------------------
-# Volumes nomeados — dados persistidos entre restarts
+# Volumes nomeados — apenas para dados que NAO precisam ser editados no host
 # ---------------------------------------------------------------------------
 volumes:
   agent_reports:
     driver: local
     labels:
       com.previswit.description: "Relatórios gerados pelo agente de pentest"
-
-  previswit_data:
-    driver: local
-    labels:
-      com.previswit.description: "Dados ASPM: findings, assets, engagements"
+  # NOTA: previswit_data foi removido.
+  # Os dados ASPM agora usam bind mount (./NewPrevy/data) para que
+  # mudanças no host sejam refletidas imediatamente no container.
 
 # ---------------------------------------------------------------------------
 # Rede isolada — todos os containers se comunicam internamente
@@ -84,7 +88,9 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
     volumes:
-      - previswit_data:/app/data
+      # Bind mount direto: o container usa os arquivos REAIS do projeto.
+      # Rebuild não apaga os dados. Mudanças nos JSONs são instantâneas.
+      - ./NewPrevy/data:/app/data
       - agent_reports:/app/reports
     networks:
       - previswit-net

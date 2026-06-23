@@ -7,7 +7,7 @@ export default function SettingsPage() {
   useEffect(() => {
     async function checkApiStatus() {
       try {
-        await fetch('http://localhost:10000/');
+        await fetch('/api/v1/assets/');
         setApiStatus('Online');
         setApiClass('bg-green-500/15 text-green-400 border-green-500/25');
       } catch {

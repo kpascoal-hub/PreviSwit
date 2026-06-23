@@ -1,0 +1,41 @@
+# .gitattributes — PreviSwit
+# Força line endings e encoding corretos para o projeto.
+# Evita o BOM (\xef\xbb\xbf) em arquivos JSON que quebram o parse no Linux.
+
+# Padrão: normaliza line endings para LF no repositório
+* text=auto eol=lf
+
+# Garante que JSON nunca tenha BOM (crítico para o parse no container Linux)
+*.json text eol=lf
+
+# Python: sempre LF
+*.py text eol=lf
+
+# JSX/JS/TS: sempre LF
+*.jsx text eol=lf
+*.js  text eol=lf
+*.ts  text eol=lf
+*.tsx text eol=lf
+
+# CSS/HTML: sempre LF
+*.css  text eol=lf
+*.html text eol=lf
+
+# Config files: sempre LF
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.env  text eol=lf
+
+# Binários — não tocar
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary
+*.zip  binary
+*.pdf  binary

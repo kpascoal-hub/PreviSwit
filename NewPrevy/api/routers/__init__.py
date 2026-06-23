@@ -10,7 +10,8 @@ from api.routers.ai_insights  import router as ai_router
 from api.routers.risk         import router as risk_router
 from api.routers.reports      import router as reports_router
 from api.routers.integrations import router as integrations_router
-from api.routers.settings     import router as settings_router
+from api.routers.settings      import router as settings_router
+from api.routers.aspm_parsers  import router as aspm_parsers_router
 
 __all__ = [
     "auth_router",
@@ -22,4 +23,5 @@ __all__ = [
     "reports_router",
     "integrations_router",
     "settings_router",
+    "aspm_parsers_router",
 ]

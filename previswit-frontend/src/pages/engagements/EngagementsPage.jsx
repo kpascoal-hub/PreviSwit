@@ -24,7 +24,10 @@ export default function EngagementsPage() {
 
   useEffect(() => {
     // Conecta ao WebSocket do Dashboard
-    wsRef.current = new WebSocket('ws://localhost:10000/ws/web_dashboard');
+    // URL dinâmica: usa o mesmo host/protocolo que a página, via proxy Nginx (/ws/)
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProto}//${window.location.host}/ws/web_dashboard`;
+    wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onopen = () => {
       addLog('Conectado ao servidor PreviSwit via WebSocket.', 'system');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API = 'http://localhost:10000/api/v1';
+const API = '/api/v1';
 
 export default function AssetsPage() {
   const [assets, setAssets] = useState([]);
@@ -14,7 +14,7 @@ export default function AssetsPage() {
       const res = await fetch(API + '/assets/');
       if (res.ok) {
         const data = await res.json();
-        setAssets(data);
+        setAssets(data.assets ?? []);   // ← unwrap o array correto
       } else {
         setError(true);
       }
