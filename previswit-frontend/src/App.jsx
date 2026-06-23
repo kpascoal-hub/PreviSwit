@@ -8,6 +8,7 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import LoginPage from './pages/login/LoginPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import AssetsPage from './pages/assets/AssetsPage';
+import AssetsCategoryPage from './pages/assets/AssetsCategoryPage';
 import EngagementsPage from './pages/engagements/EngagementsPage';
 import FindingsPage from './pages/findings/FindingsPage';
 import AiInsightsPage from './pages/ai-insights/AiInsightsPage';
@@ -23,14 +24,14 @@ export default function App() {
     <Router>
       <Routes>
         {/* Rota pública */}
-        <Route 
-          path="/login" 
-          element={<LoginPage setIsAuthenticated={setIsAuthenticated} />} 
+        <Route
+          path="/login"
+          element={<LoginPage setIsAuthenticated={setIsAuthenticated} />}
         />
 
         {/* Rotas protegidas (Dashboard) */}
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             isAuthenticated ? (
               <DashboardLayout setIsAuthenticated={setIsAuthenticated} />
@@ -40,14 +41,22 @@ export default function App() {
           }
         >
           <Route index element={<DashboardPage />} />
+
+          {/* Ativos & Produtos — visão geral + sub-categorias */}
           <Route path="assets" element={<AssetsPage />} />
-          <Route path="pipelines" element={<EngagementsPage />} />
-          <Route path="findings" element={<FindingsPage />} />
+          <Route path="assets/repositories" element={<AssetsCategoryPage />} />
+          <Route path="assets/cloud"        element={<AssetsCategoryPage />} />
+          <Route path="assets/containers"   element={<AssetsCategoryPage />} />
+          <Route path="assets/vms"          element={<AssetsCategoryPage />} />
+          <Route path="assets/domains"      element={<AssetsCategoryPage />} />
+
+          <Route path="pipelines"   element={<EngagementsPage />} />
+          <Route path="findings"    element={<FindingsPage />} />
           <Route path="ai-insights" element={<AiInsightsPage />} />
-          <Route path="risk" element={<RiskPage />} />
-          <Route path="reports" element={<ReportsPage />} />
+          <Route path="risk"        element={<RiskPage />} />
+          <Route path="reports"     element={<ReportsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings"    element={<SettingsPage />} />
         </Route>
 
         {/* Fallback */}
