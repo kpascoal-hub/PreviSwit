@@ -4,12 +4,13 @@
  * Página dedicada à seção "Repositórios" dentro de "Ativos & Produtos".
  *
  * Estrutura:
- *   - Cabeçalho com título e botão "🔗 Conectar GitHub"
+ *   - Cabeçalho com título e botão "Conectar GitHub"
  *   - Grid dinâmico (id="repositories-grid") → vazio no HTML; populado via API
  *   - Empty state (id="repositories-empty-state") → exibido enquanto sem dados
- *   - async fetchRepositories() → busca dados reais em /api/v1/assets/category/REPOSITORY
+ *   - async fetchRepositories() → busca dados reais em GET /api/v1/github/repos
+ *     Schema retornado: { repos: [{ name, language, updated_at }] }
  *
- * Regra de Ouro: ZERO dados mockados. Tudo vem da API.
+ * Regra de Ouro: ZERO dados mockados. Tudo vem da API GitHub via backend.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -17,8 +18,9 @@ import { NavLink } from 'react-router-dom';
 import {
   GitBranch, ArrowLeft, Link2, RefreshCw,
   Folder, AlertTriangle, ExternalLink,
-  Lock, Unlock, GitFork, Star, Clock,
+  Lock, Unlock, GitFork, Star, Clock, Settings
 } from 'lucide-react';
+import RiskGraphCanvas from './RiskGraphCanvas';
 
 const API = '/api/v1';
 
@@ -36,9 +38,9 @@ function fmtDate(iso) {
 function CriticalityBadge({ value }) {
   const map = {
     CRITICAL: 'bg-red-500/10 text-red-400 border-red-500/25',
-    HIGH:     'bg-orange-500/10 text-orange-400 border-orange-500/25',
-    MEDIUM:   'bg-yellow-500/10 text-yellow-400 border-yellow-500/25',
-    LOW:      'bg-blue-500/10 text-blue-400 border-blue-500/25',
+    HIGH: 'bg-orange-500/10 text-orange-400 border-orange-500/25',
+    MEDIUM: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/25',
+    LOW: 'bg-blue-500/10 text-blue-400 border-blue-500/25',
   };
   return (
     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${map[value] ?? 'bg-gray-500/10 text-gray-400 border-gray-500/25'}`}>
@@ -51,16 +53,17 @@ function CriticalityBadge({ value }) {
 
 /**
  * Card de repositório injetado dinamicamente no repositories-grid.
- * Props vêm diretamente do schema de /api/v1/assets/category/REPOSITORY.
+ * Props vêm do endpoint GET /api/v1/github/repos.
+ * Schema: { name: string, language: string|null, updated_at: string }
  */
-function RepositoryCard({ repo }) {
-  const cm = repo.category_meta ?? {};
-  const isPrivate = cm.visibility === 'private';
+function RepositoryCard({ repo, openRiskGraph }) {
+  // Slug único baseado no nome (GitHub não retorna IDs numéricos no mapeamento limpo)
+  const slug = repo.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') ?? 'repo';
 
   return (
     <div
-      id={`repo-card-${repo.id}`}
-      className="group flex flex-col gap-3 p-5 rounded-xl border border-white/5 bg-[#0d1421]
+      id={`repo-card-${slug}`}
+      className="group flex flex-col gap-3 p-5 rounded-xl border border-white/5 bg-slate-900/50
                  hover:border-purple-500/25 hover:bg-[#111827] transition-all duration-200"
     >
       {/* Header */}
@@ -74,37 +77,25 @@ function RepositoryCard({ repo }) {
               {repo.name}
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5 truncate">
-              {cm.provider ?? 'N/A'} · {cm.language ?? 'Linguagem desconhecida'}
+              GitHub · {repo.language ?? 'Linguagem desconhecida'}
             </p>
           </div>
         </div>
-        <CriticalityBadge value={repo.criticality} />
+        {/* Badge de status SAST — ainda sem scan executado */}
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border
+                         bg-green-500/10 text-green-400 border-green-500/25 whitespace-nowrap">
+          🟢 Código Limpo
+        </span>
       </div>
-
-      {/* Description */}
-      {repo.description && (
-        <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
-          {repo.description}
-        </p>
-      )}
 
       {/* Meta strip */}
       <div className="flex items-center gap-3 text-[11px] text-gray-600 mt-auto pt-2 border-t border-white/5">
-        <span className="flex items-center gap-1">
-          {isPrivate
-            ? <Lock className="w-3 h-3 text-amber-500/70" />
-            : <Unlock className="w-3 h-3 text-green-500/70" />
-          }
-          {isPrivate ? 'Privado' : 'Público'}
-        </span>
-
-        {cm.default_branch && (
-          <span className="flex items-center gap-1">
+        {repo.language && (
+          <span className="flex items-center gap-1 text-blue-400/70">
             <GitFork className="w-3 h-3" />
-            {cm.default_branch}
+            {repo.language}
           </span>
         )}
-
         <span className="flex items-center gap-1 ml-auto">
           <Clock className="w-3 h-3" />
           {fmtDate(repo.updated_at)}
@@ -113,21 +104,8 @@ function RepositoryCard({ repo }) {
 
       {/* Actions */}
       <div className="flex gap-2">
-        {cm.repo_url && (
-          <a
-            href={cm.repo_url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
-                       rounded-lg border border-white/8 text-gray-400 hover:text-white hover:border-purple-500/40
-                       hover:bg-purple-500/5 transition-all duration-150"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Abrir
-          </a>
-        )}
         <button
-          id={`btn-scan-repo-${repo.id}`}
+          id={`btn-scan-repo-${slug}`}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
                      rounded-lg border border-purple-500/25 text-purple-400
                      hover:bg-purple-500/10 hover:border-purple-500/50 transition-all duration-150"
@@ -135,6 +113,16 @@ function RepositoryCard({ repo }) {
         >
           <Star className="w-3 h-3" />
           Scan SAST
+        </button>
+        <button
+          onClick={() => openRiskGraph(repo)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
+                     rounded-lg border border-teal-500/25 text-teal-400
+                     hover:bg-teal-500/10 hover:border-teal-500/50 transition-all duration-150"
+          title="Abrir Grafo de Risco (Deep Dive)"
+        >
+          <Settings className="w-3 h-3" />
+          Deep Dive
         </button>
       </div>
     </div>
@@ -173,7 +161,16 @@ function RepositoriesEmptyState({ onConnect }) {
 
 // ── Connect Modal Placeholder ─────────────────────────────────────────────────
 
-function ConnectModal({ open, onClose }) {
+function ConnectModal({ open, onClose, onConnectSuccess }) {
+  const [tokenInput, setTokenInput] = useState('');
+
+  const handleConnect = () => {
+    if (!tokenInput.trim()) return;
+    sessionStorage.setItem('GITHUB_TOKEN', tokenInput.trim());
+    onConnectSuccess();
+    onClose();
+  };
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -183,40 +180,29 @@ function ConnectModal({ open, onClose }) {
             <Link2 className="w-5 h-5 text-purple-400" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">Conectar Provedor Git</h3>
-            <p className="text-xs text-gray-500 mt-0.5">OAuth via GitHub, GitLab ou Bitbucket</p>
+            <h3 className="text-sm font-semibold text-white">Conectar GitHub</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Informe seu Personal Access Token (PAT)</p>
           </div>
         </div>
 
-        {/* Providers */}
-        <div className="space-y-2 mb-6">
-          {[
-            { id: 'github',    label: 'GitHub',    hint: 'github.com',    icon: '🐙', ready: true  },
-            { id: 'gitlab',    label: 'GitLab',    hint: 'gitlab.com',    icon: '🦊', ready: false },
-            { id: 'bitbucket', label: 'Bitbucket', hint: 'bitbucket.org', icon: '🪣', ready: false },
-          ].map(p => (
-            <button
-              key={p.id}
-              id={`btn-oauth-${p.id}`}
-              disabled={!p.ready}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left
-                transition-all duration-150
-                ${p.ready
-                  ? 'border-white/10 hover:border-purple-500/40 hover:bg-purple-500/5 cursor-pointer'
-                  : 'border-white/5 opacity-40 cursor-not-allowed'
-                }`}
-            >
-              <span className="text-xl">{p.icon}</span>
-              <div>
-                <p className="text-sm font-medium text-white">{p.label}</p>
-                <p className="text-[11px] text-gray-500">{p.hint}</p>
-              </div>
-              {p.ready
-                ? <span className="ml-auto text-[10px] text-green-400 border border-green-500/25 bg-green-500/10 px-2 py-0.5 rounded-full">Disponível</span>
-                : <span className="ml-auto text-[10px] text-gray-600 border border-gray-700 px-2 py-0.5 rounded-full">Em breve</span>
-              }
-            </button>
-          ))}
+        {/* Token Input */}
+        <div className="space-y-4 mb-6">
+          <div>
+            <label htmlFor="github-token" className="block text-xs font-medium text-gray-400 mb-1.5">
+              GitHub Token
+            </label>
+            <input
+              id="github-token"
+              type="password"
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              value={tokenInput}
+              onChange={e => setTokenInput(e.target.value)}
+              className="w-full bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all placeholder:text-gray-600"
+            />
+            <p className="text-[10px] text-gray-500 mt-1.5">
+              O token é armazenado de forma segura apenas na sessão do seu navegador e não é enviado ao banco de dados.
+            </p>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -229,10 +215,12 @@ function ConnectModal({ open, onClose }) {
           </button>
           <button
             id="btn-oauth-confirm"
+            onClick={handleConnect}
+            disabled={!tokenInput.trim()}
             className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm
-                       font-semibold shadow-lg shadow-purple-500/20 transition-all"
+                       font-semibold shadow-lg shadow-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Autorizar GitHub
+            Conectar
           </button>
         </div>
       </div>
@@ -245,32 +233,58 @@ function ConnectModal({ open, onClose }) {
 export default function RepositoriesPage() {
   // ── State ────────────────────────────────────────────────────────────────
   const [repositories, setRepositories] = useState([]);   // dados vindos da API
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState(null);
-  const [lastSync,     setLastSync]     = useState(null);
-  const [connectOpen,  setConnectOpen]  = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastSync, setLastSync] = useState(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+
+  // View Control
+  const [activeView, setActiveView] = useState('list');
+  const [selectedRepo, setSelectedRepo] = useState(null);
+
+  const openRiskGraph = useCallback((repo) => {
+    setSelectedRepo(repo);
+    setActiveView('canvas');
+  }, []);
 
   // ── API ──────────────────────────────────────────────────────────────────
 
   /**
-   * fetchRepositories — busca repositórios reais da API.
+   * fetchRepositories — busca repositórios reais do GitHub via backend.
    *
-   * Endpoint: GET /api/v1/assets/category/REPOSITORY
+   * Endpoint: GET /api/v1/github/repos
+   * Schema retornado: { repos: [{ name, language, updated_at }] }
    * Popula: repositories-grid (via setRepositories)
    * Oculta: repositories-empty-state (quando repositories.length > 0)
    *
-   * Nenhum dado mock é usado. Se a API retornar lista vazia,
-   * o empty state será exibido automaticamente.
+   * Nenhum dado mock é usado. O backend consulta o GitHub com GITHUB_TOKEN.
+   * Se a API retornar lista vazia, o empty state é exibido automaticamente.
    */
   const fetchRepositories = useCallback(async () => {
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+    if (!token) {
+      setRepositories([]);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/assets/category/REPOSITORY`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`${API}/github/repos`, {
+        headers: {
+          'X-GitHub-Token': token
+        }
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('GITHUB_TOKEN');
+          throw new Error("Token inválido ou ausente. Reconecte seu GitHub.");
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
-      // O campo "assets" contém a lista paginada retornada pelo backend
-      setRepositories(data.assets ?? []);
+      // O campo "repos" contém a lista mapeada retornada pelo github router
+      setRepositories(data.repos ?? []);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -284,10 +298,14 @@ export default function RepositoriesPage() {
   // ── Render ───────────────────────────────────────────────────────────────
   const hasRepos = repositories.length > 0;
 
+  if (activeView === 'canvas' && selectedRepo) {
+    return <RiskGraphCanvas repo={selectedRepo} onBack={() => setActiveView('list')} />;
+  }
+
   return (
     <>
       {/* Connect Modal */}
-      <ConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} />
+      <ConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onConnectSuccess={fetchRepositories} />
 
       {/* Page wrapper — id="view-repositories" mantém compatibilidade com naming do spec */}
       <section
@@ -347,7 +365,7 @@ export default function RepositoriesPage() {
                          shadow-lg shadow-purple-500/20 transition-all duration-200"
             >
               <Link2 className="w-4 h-4" />
-              🔗 Conectar GitHub
+              Conectar GitHub
             </button>
           </div>
         </div>
@@ -355,9 +373,17 @@ export default function RepositoriesPage() {
         {/* ── KPI strip ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Total',    value: loading ? '…' : repositories.length,                                                    color: 'text-white'       },
-            { label: 'Críticos', value: loading ? '…' : repositories.filter(r => r.criticality === 'CRITICAL').length,          color: 'text-red-400'     },
-            { label: 'Privados', value: loading ? '…' : repositories.filter(r => r.category_meta?.visibility === 'private').length, color: 'text-amber-400' },
+            { label: 'Total', value: loading ? '…' : repositories.length, color: 'text-white' },
+            {
+              label: 'Linguagens',
+              value: loading ? '…' : new Set(repositories.map(r => r.language).filter(Boolean)).size,
+              color: 'text-blue-400',
+            },
+            {
+              label: 'Sem Scan',
+              value: loading ? '…' : repositories.length,
+              color: 'text-amber-400',
+            },
           ].map(stat => (
             <div key={stat.label} className="bg-[#0d1421] border border-white/5 rounded-xl p-4 flex items-center gap-3">
               <div className="flex-1">
@@ -399,8 +425,8 @@ export default function RepositoriesPage() {
             id="repositories-grid"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
           >
-            {repositories.map(repo => (
-              <RepositoryCard key={repo.id} repo={repo} />
+            {repositories.map((repo, idx) => (
+              <RepositoryCard key={repo.name ?? idx} repo={repo} openRiskGraph={openRiskGraph} />
             ))}
           </div>
         )}

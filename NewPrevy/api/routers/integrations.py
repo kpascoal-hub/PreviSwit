@@ -7,6 +7,7 @@ import json
 import os
 import uuid
 from datetime import datetime
+import httpx
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 

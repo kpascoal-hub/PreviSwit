@@ -44,3 +44,32 @@ body {
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     border-radius: 1rem;
 }
+
+/* Scrollbars Globais Dark Mode */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #060b13; /* Fundo invisível/super escuro */
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ffffff; /* Bolinha/puxador branco */
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #e2e8f0; /* Branca suave no hover */
+}
+
+::-webkit-scrollbar-corner {
+    background: #060b13;
+}
+
+/* Compatibilidade Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff #060b13;
+}

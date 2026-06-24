@@ -20,6 +20,7 @@ from api.routers.ai_insights  import router as ai_router
 from api.routers.risk         import router as risk_router
 from api.routers.reports      import router as reports_router
 from api.routers.integrations import router as integrations_router
+from api.routers.github import router as github_router
 from api.routers.aspm_parsers import router as aspm_parsers_router
 from api.routers.settings     import router as settings_router
 from config import Config
@@ -62,6 +63,7 @@ app.include_router(risk_router,         prefix="/api/v1", tags=["Risk & Posture"
 app.include_router(reports_router,      prefix="/api/v1", tags=["Reports"])
 app.include_router(integrations_router, prefix="/api/v1", tags=["Integrations"])
 app.include_router(aspm_parsers_router, prefix="/api/v1", tags=["ASPM Parsers (SAST/Secrets/IaC)"])
+app.include_router(github_router,       prefix="/api/v1", tags=["GitHub"])
 app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
 
 
