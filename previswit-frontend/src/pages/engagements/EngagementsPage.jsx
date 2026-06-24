@@ -109,8 +109,8 @@ export default function EngagementsPage() {
     <div className="flex flex-col gap-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Engajamentos & Scans</h1>
-          <p className="text-gray-400 text-sm mt-1">Orquestração e monitoramento de pipelines de segurança em tempo real.</p>
+          <h1 className="text-2xl font-bold text-white">Pentest</h1>
+          <p className="text-gray-400 text-sm mt-1">Orquestração e monitoramento de scans DAST — ataque ativo a alvos em tempo real.</p>
         </div>
       </div>
 

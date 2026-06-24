@@ -23,7 +23,7 @@ const assetSubItems = [
 // ── Flat nav items (no sub-menu) ──────────────────────────────────────────────
 const mainNavItems = [
   { id: 'overview',  path: '/',           label: 'Visão Geral',          icon: <LayoutDashboard className="w-4 h-4" /> },
-  { id: 'pipelines', path: '/pipelines',  label: 'Engajamentos & Scans', icon: <Workflow        className="w-4 h-4" /> },
+  { id: 'pentest',   path: '/pentest',    label: 'Pentest',              icon: <Workflow        className="w-4 h-4" /> },
   { id: 'findings',  path: '/findings',   label: 'Central de Findings',  icon: <TerminalSquare  className="w-4 h-4" /> },
   { id: 'ai',        path: '/ai-insights',label: 'IA Insights',          icon: <BrainCircuit    className="w-4 h-4" /> },
   { id: 'risk',      path: '/risk',       label: 'Métricas de Risco',    icon: <TrendingUp      className="w-4 h-4" /> },
@@ -105,7 +105,7 @@ function AssetsAccordion() {
           transition: 'max-height 260ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        {/* mb-3 garante espaço antes do próximo item ("Engajamentos & Scans") */}
+        {/* mb-3 garante espaço antes do próximo item ("Pentest") */}
         <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5 py-0.5 mb-3">
           {assetSubItems.map(sub => (
             <NavLink

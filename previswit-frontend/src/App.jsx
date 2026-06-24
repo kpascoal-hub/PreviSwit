@@ -50,7 +50,7 @@ export default function App() {
           <Route path="assets/vms"          element={<AssetsCategoryPage />} />
           <Route path="assets/domains"      element={<AssetsCategoryPage />} />
 
-          <Route path="pipelines"   element={<EngagementsPage />} />
+          <Route path="pentest"     element={<EngagementsPage />} />
           <Route path="findings"    element={<FindingsPage />} />
           <Route path="ai-insights" element={<AiInsightsPage />} />
           <Route path="risk"        element={<RiskPage />} />
