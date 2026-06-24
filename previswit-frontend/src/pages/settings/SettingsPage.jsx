@@ -55,7 +55,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between py-2">
             <div>
               <p className="text-sm text-white">API REST (PreviSwit Server)</p>
-              <p className="text-xs text-gray-500 font-mono">http://localhost:10000</p>
+              <p className="text-xs text-gray-500 font-mono">http://localhost:10200</p>
             </div>
             <span className={`text-xs border px-2 py-1 rounded-full ${apiClass}`}>{apiStatus}</span>
           </div>

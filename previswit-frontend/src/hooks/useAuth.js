@@ -6,7 +6,7 @@ import { useState, useCallback } from 'react';
 
 const AUTH_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace('/api/v1', '')
-  : 'http://localhost:10000';
+  : 'http://localhost:10200';
 
 export function useAuth() {
   const [user, setUser] = useState(() => {

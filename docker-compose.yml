@@ -2,7 +2,7 @@
 # PreviSwit AI-ASPM — Docker Compose v4
 # =============================================================================
 # Serviços:
-#   previswit-server   → FastAPI + WebSocket Hub (porta 10000)
+#   previswit-server   → FastAPI + WebSocket Hub (porta 10200)
 #   previswit-agent    → Agente de Pentest Kali (cliente WS)
 #   previswit-frontend → React/Vite + Nginx (porta 3000)
 #
@@ -51,7 +51,7 @@ services:
   # ===========================================================================
   # previswit-server
   # FastAPI v4 + WebSocket Hub — API REST + Orquestração de Scans
-  # Porta: 10000 (host) → 10000 (container)
+  # Porta: 10200 (host) → 10200 (container)
   # ===========================================================================
   previswit-server:
     build:
@@ -60,11 +60,11 @@ services:
     container_name: previswit-server
     restart: unless-stopped
     ports:
-      - "10000:10000"
+      - "10200:10200"
     environment:
       # Servidor
       SERVER_HOST: "0.0.0.0"
-      SERVER_PORT: "10000"
+      SERVER_PORT: "10200"
       APP_ENV: "${APP_ENV:-production}"
 
       # Segurança
@@ -95,7 +95,7 @@ services:
     networks:
       - previswit-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:10000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:10200/"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -114,7 +114,7 @@ services:
     restart: unless-stopped
     command: ["python3", "ws_listener.py"]
     environment:
-      PREVISWIT_WS_URI: "ws://previswit-server:10000/ws/agent_01"
+      PREVISWIT_WS_URI: "ws://previswit-server:10200/ws/agent_01"
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       REPORTS_DIR: "/app/reports"
       PYTHONUNBUFFERED: "1"
@@ -129,7 +129,7 @@ services:
   # ===========================================================================
   # previswit-frontend
   # Dashboard React/Vite compilado → servido por Nginx Alpine
-  # Proxy reverso interno: /api/* e /ws/* → previswit-server:10000
+  # Proxy reverso interno: /api/* e /ws/* → previswit-server:10200
   # Porta: 3000 (host) → 80 (container)
   # ===========================================================================
   previswit-frontend:
