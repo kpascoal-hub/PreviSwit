@@ -56,10 +56,10 @@ const CATEGORIES = {
 // ── Sub-nav breadcrumb pills ─────────────────────────────────────────────────
 const SUB_LINKS = [
   { path: '/assets/repositories', label: 'Repositórios' },
-  { path: '/assets/cloud',        label: 'Cloud' },
-  { path: '/assets/containers',   label: 'Contêineres' },
-  { path: '/assets/vms',          label: 'Máquinas Virtuais' },
-  { path: '/assets/domains',      label: 'Domínios & APIs' },
+  { path: '/assets/cloud', label: 'Cloud' },
+  { path: '/assets/containers', label: 'Contêineres' },
+  { path: '/assets/vms', label: 'Máquinas Virtuais' },
+  { path: '/assets/domains', label: 'Domínios & APIs' },
 ];
 
 export default function AssetsCategoryPage() {
@@ -68,16 +68,16 @@ export default function AssetsCategoryPage() {
   // Map frontend URL slug → API type key
   const SLUG_TO_TYPE = {
     repositories: 'REPOSITORY',
-    cloud:        'CLOUD',
-    containers:   'CONTAINER',
-    vms:          'VM',
-    domains:      'DOMAIN',
+    cloud: 'CLOUD',
+    containers: 'CONTAINER',
+    vms: 'VM',
+    domains: 'DOMAIN',
   };
   const apiType = SLUG_TO_TYPE[category];
 
-  const [data,    setData]    = useState(null);   // full API response
+  const [data, setData] = useState(null);   // full API response
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(false);
+  const [error, setError] = useState(false);
 
   const fetchCategory = async () => {
     if (!apiType) return;
@@ -107,7 +107,7 @@ export default function AssetsCategoryPage() {
     );
   }
 
-  const meta   = CATEGORIES[category] ?? {};
+  const meta = CATEGORIES[category] ?? {};
   const assets = data?.assets ?? [];
   const counts = data?.counts ?? {};
 
@@ -153,10 +153,9 @@ export default function AssetsCategoryPage() {
             key={link.path}
             to={link.path}
             className={({ isActive }) =>
-              `px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${
-                isActive
-                  ? 'bg-blue-600/15 text-blue-400 border-blue-500/30'
-                  : 'text-gray-500 border-white/10 hover:text-gray-300 hover:border-white/20'
+              `px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 ${isActive
+                ? 'bg-blue-600/15 text-blue-400 border-blue-500/30'
+                : 'text-gray-500 border-white/10 hover:text-gray-300 hover:border-white/20'
               }`
             }
           >
@@ -168,9 +167,9 @@ export default function AssetsCategoryPage() {
       {/* ── Stats strip ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Total',    value: loading ? '…' : assets.length,                                                    color: 'text-white' },
-          { label: 'Críticos', value: loading ? '…' : assets.filter(a => a.criticality === 'CRITICAL').length,          color: 'text-red-400' },
-          { label: 'Altos',    value: loading ? '…' : assets.filter(a => a.criticality === 'HIGH').length,              color: 'text-orange-400' },
+          { label: 'Total', value: loading ? '…' : assets.length, color: 'text-white' },
+          { label: 'Críticos', value: loading ? '…' : assets.filter(a => a.criticality === 'CRITICAL').length, color: 'text-red-400' },
+          { label: 'Altos', value: loading ? '…' : assets.filter(a => a.criticality === 'HIGH').length, color: 'text-orange-400' },
         ].map(stat => (
           <div key={stat.label} className="bg-[#0d1421] border border-white/5 rounded-xl p-4">
             <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">{stat.label}</p>
@@ -234,13 +233,12 @@ export default function AssetsCategoryPage() {
                       <span className="text-xs text-gray-600">{a.tags.slice(0, 2).join(', ')}</span>
                     )}
                     <span
-                      className={`text-xs px-2 py-1 rounded-full border ${
-                        a.criticality === 'CRITICAL'
+                      className={`text-xs px-2 py-1 rounded-full border ${a.criticality === 'CRITICAL'
                           ? 'bg-red-500/10 text-red-400 border-red-500/20'
                           : a.criticality === 'HIGH'
-                          ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                          : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                      }`}
+                            ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                            : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                        }`}
                     >
                       {a.criticality || 'N/A'}
                     </span>

@@ -7,89 +7,89 @@ const API = '/api/v1';
 // Mapeamento de ícones por tipo (backend retorna string, frontend mapeia para JSX)
 const ICON_MAP = {
   'git-branch': <GitBranch className="w-5 h-5" />,
-  'cloud':      <Cloud     className="w-5 h-5" />,
-  'box':        <Box       className="w-5 h-5" />,
-  'monitor':    <Monitor   className="w-5 h-5" />,
-  'globe':      <Globe     className="w-5 h-5" />,
+  'cloud': <Cloud className="w-5 h-5" />,
+  'box': <Box className="w-5 h-5" />,
+  'monitor': <Monitor className="w-5 h-5" />,
+  'globe': <Globe className="w-5 h-5" />,
 };
 
 // Paleta de cores por color-key retornada pelo backend
 const COLOR_MAP = {
-  purple:  { bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-400' },
-  sky:     { bg: 'bg-sky-500/10',    border: 'border-sky-500/20',    text: 'text-sky-400' },
-  cyan:    { bg: 'bg-cyan-500/10',   border: 'border-cyan-500/20',   text: 'text-cyan-400' },
-  amber:   { bg: 'bg-amber-500/10',  border: 'border-amber-500/20',  text: 'text-amber-400' },
-  emerald: { bg: 'bg-emerald-500/10',border: 'border-emerald-500/20',text: 'text-emerald-400' },
+  purple: { bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-400' },
+  sky: { bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400' },
+  cyan: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400' },
+  amber: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' },
+  emerald: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
 };
 
 // Rota do frontend por tipo de ativo
 const TYPE_TO_PATH = {
   REPOSITORY: '/assets/repositories',
-  CLOUD:      '/assets/cloud',
-  CONTAINER:  '/assets/containers',
-  VM:         '/assets/vms',
-  DOMAIN:     '/assets/domains',
+  CLOUD: '/assets/cloud',
+  CONTAINER: '/assets/containers',
+  VM: '/assets/vms',
+  DOMAIN: '/assets/domains',
 };
 
 // ── Categoria cards para o resumo ─────────────────────────────────────────────
 const CATEGORY_CARDS = [
   {
-    path:       '/assets/repositories',
-    label:      'Repositórios',
-    hint:       'GitHub · GitLab · Bitbucket',
-    icon:       <GitBranch className="w-5 h-5" />,
+    path: '/assets/repositories',
+    label: 'Repositórios',
+    hint: 'GitHub · GitLab · Bitbucket',
+    icon: <GitBranch className="w-5 h-5" />,
     typeFilter: 'REPOSITORY',
-    colorBg:    'bg-purple-500/10',
-    colorBorder:'border-purple-500/20',
-    colorText:  'text-purple-400',
+    colorBg: 'bg-purple-500/10',
+    colorBorder: 'border-purple-500/20',
+    colorText: 'text-purple-400',
   },
   {
-    path:       '/assets/cloud',
-    label:      'Cloud',
-    hint:       'AWS · Azure · GCP',
-    icon:       <Cloud className="w-5 h-5" />,
+    path: '/assets/cloud',
+    label: 'Cloud',
+    hint: 'AWS · Azure · GCP',
+    icon: <Cloud className="w-5 h-5" />,
     typeFilter: 'CLOUD',
-    colorBg:    'bg-sky-500/10',
-    colorBorder:'border-sky-500/20',
-    colorText:  'text-sky-400',
+    colorBg: 'bg-sky-500/10',
+    colorBorder: 'border-sky-500/20',
+    colorText: 'text-sky-400',
   },
   {
-    path:       '/assets/containers',
-    label:      'Contêineres',
-    hint:       'Imagens Docker · Kubernetes',
-    icon:       <Box className="w-5 h-5" />,
+    path: '/assets/containers',
+    label: 'Contêineres',
+    hint: 'Imagens Docker · Kubernetes',
+    icon: <Box className="w-5 h-5" />,
     typeFilter: 'CONTAINER',
-    colorBg:    'bg-cyan-500/10',
-    colorBorder:'border-cyan-500/20',
-    colorText:  'text-cyan-400',
+    colorBg: 'bg-cyan-500/10',
+    colorBorder: 'border-cyan-500/20',
+    colorText: 'text-cyan-400',
   },
   {
-    path:       '/assets/vms',
-    label:      'Máquinas Virtuais',
-    hint:       'VMs · Instâncias · Bare Metal',
-    icon:       <Monitor className="w-5 h-5" />,
+    path: '/assets/vms',
+    label: 'Máquinas Virtuais',
+    hint: 'VMs · Instâncias · Bare Metal',
+    icon: <Monitor className="w-5 h-5" />,
     typeFilter: 'VM',
-    colorBg:    'bg-amber-500/10',
-    colorBorder:'border-amber-500/20',
-    colorText:  'text-amber-400',
+    colorBg: 'bg-amber-500/10',
+    colorBorder: 'border-amber-500/20',
+    colorText: 'text-amber-400',
   },
   {
-    path:       '/assets/domains',
-    label:      'Domínios & APIs',
-    hint:       'Endpoints expostos · APIs públicas',
-    icon:       <Globe className="w-5 h-5" />,
+    path: '/assets/domains',
+    label: 'Domínios & APIs',
+    hint: 'Endpoints expostos · APIs públicas',
+    icon: <Globe className="w-5 h-5" />,
     typeFilter: 'DOMAIN',
-    colorBg:    'bg-emerald-500/10',
-    colorBorder:'border-emerald-500/20',
-    colorText:  'text-emerald-400',
+    colorBg: 'bg-emerald-500/10',
+    colorBorder: 'border-emerald-500/20',
+    colorText: 'text-emerald-400',
   },
 ];
 
 export default function AssetsPage() {
   const [summary, setSummary] = useState(null);   // GET /assets/summary
-  const [assets,  setAssets]  = useState([]);     // GET /assets/ (inventário completo)
+  const [assets, setAssets] = useState([]);     // GET /assets/ (inventário completo)
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(false);
+  const [error, setError] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -99,7 +99,7 @@ export default function AssetsPage() {
         fetch(API + '/assets/summary'),
         fetch(API + '/assets/'),
       ]);
-      if (sumRes.ok)  setSummary(await sumRes.json());
+      if (sumRes.ok) setSummary(await sumRes.json());
       if (listRes.ok) setAssets((await listRes.json()).assets ?? []);
       if (!sumRes.ok && !listRes.ok) setError(true);
     } catch {
@@ -110,9 +110,9 @@ export default function AssetsPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const total    = summary?.total    ?? assets.length;
+  const total = summary?.total ?? assets.length;
   const critical = summary?.critical ?? 0;
-  const high     = summary?.high     ?? 0;
+  const high = summary?.high ?? 0;
 
   return (
     <div className="flex flex-col h-full space-y-6">
@@ -171,40 +171,40 @@ export default function AssetsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {summary
             ? Object.entries(summary.by_type).map(([typeKey, cat]) => {
-                const colors = COLOR_MAP[cat.color] ?? COLOR_MAP.purple;
-                const icon   = ICON_MAP[cat.icon]   ?? <Server className="w-5 h-5" />;
-                const path   = TYPE_TO_PATH[typeKey] ?? '/assets';
-                return (
-                  <NavLink
-                    key={typeKey}
-                    to={path}
-                    className="group flex items-center gap-4 p-4 bg-[#0d1421] border border-white/5 rounded-xl hover:border-white/10 hover:bg-[#111b2e] transition-all duration-150"
-                  >
-                    {/* Icon */}
-                    <div className={`p-2.5 rounded-lg border ${colors.bg} ${colors.border} shrink-0`}>
-                      <span className={colors.text}>{icon}</span>
-                    </div>
+              const colors = COLOR_MAP[cat.color] ?? COLOR_MAP.purple;
+              const icon = ICON_MAP[cat.icon] ?? <Server className="w-5 h-5" />;
+              const path = TYPE_TO_PATH[typeKey] ?? '/assets';
+              return (
+                <NavLink
+                  key={typeKey}
+                  to={path}
+                  className="group flex items-center gap-4 p-4 bg-[#0d1421] border border-white/5 rounded-xl hover:border-white/10 hover:bg-[#111b2e] transition-all duration-150"
+                >
+                  {/* Icon */}
+                  <div className={`p-2.5 rounded-lg border ${colors.bg} ${colors.border} shrink-0`}>
+                    <span className={colors.text}>{icon}</span>
+                  </div>
 
-                    {/* Text */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white group-hover:text-gray-100">{cat.label}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">{cat.hint}</p>
-                    </div>
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white group-hover:text-gray-100">{cat.label}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{cat.hint}</p>
+                  </div>
 
-                    {/* Count + criticidade pill */}
-                    <div className="shrink-0 text-right">
-                      <p className={`text-lg font-bold ${colors.text}`}>{cat.count}</p>
-                      <p className="text-[10px] text-gray-600">
-                        {cat.critical > 0 ? `${cat.critical} crítico${cat.critical > 1 ? 's' : ''}` : 'ativos'}
-                      </p>
-                    </div>
-                  </NavLink>
-                );
-              })
+                  {/* Count + criticidade pill */}
+                  <div className="shrink-0 text-right">
+                    <p className={`text-lg font-bold ${colors.text}`}>{cat.count}</p>
+                    <p className="text-[10px] text-gray-600">
+                      {cat.critical > 0 ? `${cat.critical} crítico${cat.critical > 1 ? 's' : ''}` : 'ativos'}
+                    </p>
+                  </div>
+                </NavLink>
+              );
+            })
             : /* Skeleton enquanto summary carrega */
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-[76px] bg-[#0d1421] border border-white/5 rounded-xl animate-pulse" />
-              ))
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-[76px] bg-[#0d1421] border border-white/5 rounded-xl animate-pulse" />
+            ))
           }
         </div>
       </div>
@@ -260,13 +260,12 @@ export default function AssetsPage() {
                     </div>
                   </div>
                   <span
-                    className={`text-xs px-2 py-1 rounded-full border ${
-                      a.criticality === 'CRITICAL'
+                    className={`text-xs px-2 py-1 rounded-full border ${a.criticality === 'CRITICAL'
                         ? 'bg-red-500/10 text-red-400 border-red-500/20'
                         : a.criticality === 'HIGH'
-                        ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                        : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                    }`}
+                          ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                          : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                      }`}
                   >
                     {a.criticality || 'N/A'}
                   </span>

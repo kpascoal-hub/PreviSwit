@@ -16,7 +16,7 @@ export default function FindingsPage() {
       if (res.ok) {
         const data = await res.json();
         setFindings(data.findings ?? []);
-        
+
         const newCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
         (data.findings ?? []).forEach(f => {
           if (newCounts[f.severity] !== undefined) newCounts[f.severity]++;
@@ -52,7 +52,7 @@ export default function FindingsPage() {
         <h2 className="text-xl font-semibold text-white">Central de Findings</h2>
         <p className="text-sm text-gray-500 mt-1">Triagem unificada de vulnerabilidades com deduplicação por IA.</p>
       </div>
-      
+
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
           <p className="text-xs text-red-400 uppercase tracking-wider mb-1">Crítico</p>
