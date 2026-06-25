@@ -1,0 +1,206 @@
+"""
+PreviSwit AI-ASPM — Core: AI Manager (Cérebro Central)
+Gerenciador unificado do Gemini via novo SDK google-genai.
+Suporta chamadas stateless (generate_insight) e chats com memória
+persistente por session_id (chat_with_memory).
+"""
+import os
+import json
+import logging
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger("previswit.ai_manager")
+
+try:
+    from google import genai
+    from google.genai import types
+    _SDK_AVAILABLE = True
+except ImportError:
+    _SDK_AVAILABLE = False
+    logger.warning("SDK google-genai não instalado. Funcionalidades de IA desabilitadas.")
+
+# Caminho raiz para armazenar memórias de sessão
+_MEMORY_DIR = Path(__file__).parent.parent / "data"
+_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+_SYSTEM_INSTRUCTION = (
+    "Você é o Gemini Security Copilot da plataforma PreviSwit AI-ASPM — "
+    "um assistente especialista em Application Security Posture Management (ASPM), "
+    "segurança de software, análise de commits e revisão de código. "
+    "Responda sempre em português brasileiro. "
+    "Seja técnico, preciso e direto ao ponto. "
+    "Quando analisar código ou commits, foque em vulnerabilidades reais, "
+    "problemas de qualidade e boas práticas de segurança."
+)
+
+
+class AIManager:
+    """
+    Cérebro Central de IA para o PreviSwit.
+    
+    - generate_insight(): Chamada stateless para análises pontuais.
+    - chat_with_memory(): Chat com memória persistente por session_id.
+    """
+
+    def __init__(self):
+        self._client: Optional[object] = None
+        self._api_key = os.getenv("GEMINI_API_KEY", "")
+        self._model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        # Cache em memória dos históricos de sessão carregados do disco
+        self._session_cache: dict[str, list] = {}
+
+        if not _SDK_AVAILABLE:
+            logger.error("SDK google-genai não disponível. Instale: pip install google-genai")
+        elif not self._api_key:
+            logger.warning("GEMINI_API_KEY não configurada. IA desabilitada.")
+        else:
+            try:
+                self._client = genai.Client(api_key=self._api_key)
+                logger.info(f"AIManager inicializado com modelo {self._model}")
+            except Exception as e:
+                logger.error(f"Falha ao inicializar genai.Client: {e}")
+
+    @property
+    def is_available(self) -> bool:
+        return self._client is not None
+
+    def _unavailable_msg(self) -> str:
+        if not _SDK_AVAILABLE:
+            return "⚠️ SDK google-genai não instalado no servidor."
+        if not self._api_key:
+            return "⚠️ GEMINI_API_KEY não configurada. Acesse as Configurações da plataforma para habilitar o Copilot de IA."
+        return "⚠️ Cliente de IA indisponível. Tente novamente em instantes."
+
+    # ── Método 1: Stateless ───────────────────────────────────────────────────
+
+    async def generate_insight(
+        self,
+        prompt: str,
+        system_instruction: str = ""
+    ) -> str:
+        """
+        Gera um insight único sem guardar histórico.
+        Ideal para resumos de repositórios e análises pontuais de commits.
+        """
+        if not self.is_available:
+            return self._unavailable_msg()
+
+        sys_instr = system_instruction or _SYSTEM_INSTRUCTION
+
+        try:
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=sys_instr,
+                    temperature=0.3,
+                    max_output_tokens=2048,
+                ),
+            )
+            return response.text.strip()
+        except Exception as e:
+            err = str(e)
+            logger.error(f"generate_insight falhou: {err}")
+            # Tratamento de erros específicos da API
+            if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                return "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
+            if "503" in err or "UNAVAILABLE" in err:
+                return "⚠️ Serviço Gemini temporariamente indisponível. Tente novamente em instantes."
+            return f"⚠️ Erro ao consultar IA: {err}"
+
+    # ── Método 2: Stateful com memória persistente ────────────────────────────
+
+    def _memory_path(self, session_id: str) -> Path:
+        # Sanitiza o session_id para ser um nome de arquivo seguro
+        safe_id = "".join(c if c.isalnum() or c in "-_." else "_" for c in session_id)
+        return _MEMORY_DIR / f"ai_memory_{safe_id}.json"
+
+    def _load_history(self, session_id: str) -> list:
+        """Carrega histórico de mensagens do disco (formato google-genai)."""
+        if session_id in self._session_cache:
+            return self._session_cache[session_id]
+        path = self._memory_path(session_id)
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                self._session_cache[session_id] = data
+                return data
+            except Exception as e:
+                logger.warning(f"Falha ao carregar histórico de {session_id}: {e}")
+        return []
+
+    def _save_history(self, session_id: str, history: list) -> None:
+        """Persiste histórico de mensagens no disco."""
+        self._session_cache[session_id] = history
+        path = self._memory_path(session_id)
+        try:
+            path.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Falha ao salvar histórico de {session_id}: {e}")
+
+    async def chat_with_memory(self, session_id: str, prompt: str) -> str:
+        """
+        Envia uma mensagem para o Gemini mantendo histórico persistente
+        por session_id. Cada session_id tem seu próprio arquivo de memória
+        em data/ai_memory_{session_id}.json.
+        """
+        if not self.is_available:
+            return self._unavailable_msg()
+
+        # Carrega histórico anterior
+        history = self._load_history(session_id)
+
+        # Constrói o conteúdo completo: contexto do sistema + histórico + nova mensagem
+        contents: list[dict] = []
+        for msg in history:
+            contents.append(msg)
+        contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+        try:
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=self._model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=_SYSTEM_INSTRUCTION,
+                    temperature=0.4,
+                    max_output_tokens=2048,
+                ),
+            )
+            answer = response.text.strip()
+
+            # Salva a nova dupla de mensagens no histórico
+            history.append({"role": "user", "parts": [{"text": prompt}]})
+            history.append({"role": "model", "parts": [{"text": answer}]})
+
+            # Mantém no máximo 40 mensagens (20 turnos) para evitar context overflow
+            if len(history) > 40:
+                history = history[-40:]
+
+            self._save_history(session_id, history)
+            return answer
+
+        except Exception as e:
+            err = str(e)
+            logger.error(f"chat_with_memory falhou para session '{session_id}': {err}")
+            if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                return "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
+            if "503" in err or "UNAVAILABLE" in err:
+                return "⚠️ Serviço Gemini temporariamente indisponível."
+            return f"⚠️ Erro ao consultar IA: {err}"
+
+    def clear_session(self, session_id: str) -> None:
+        """Apaga o histórico de uma sessão do cache e do disco."""
+        self._session_cache.pop(session_id, None)
+        path = self._memory_path(session_id)
+        if path.exists():
+            path.unlink()
+            logger.info(f"Memória de sessão '{session_id}' apagada.")
+
+
+# ── Instância Global ──────────────────────────────────────────────────────────
+# Importe esta instância em qualquer router: from core.ai_manager import ai_core
+ai_core = AIManager()

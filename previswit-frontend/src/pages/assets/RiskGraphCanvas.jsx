@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowLeft, GitCommit, User, Clock, ShieldAlert, ChevronRight, FileCode, BrainCircuit, Code, PlusCircle, MinusCircle, GitPullRequest, GripHorizontal, X, Filter, Search } from 'lucide-react';
+import { ArrowLeft, GitCommit, User, Clock, ShieldAlert, ChevronRight, FileCode, BrainCircuit, Code, PlusCircle, MinusCircle, GitPullRequest, GripHorizontal, X, Filter, Search, Shield, Send, Bot, FileText, Activity, MessageSquare } from 'lucide-react';
 
 const API = '/api/v1';
 
@@ -28,6 +28,13 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   const [selectedIDECommit, setSelectedIDECommit] = useState(null);
   const [selectedIDEFile, setSelectedIDEFile] = useState(null);
   const [ideLoading, setIdeLoading] = useState(false);
+
+  // AI Copilot States
+  const [isCopilotMenuOpen, setIsCopilotMenuOpen] = useState(false);
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', content: 'Olá! Sou seu Copilot de Segurança. O que vamos auditar hoje?' }]);
+  const [chatInput, setChatInput] = useState('');
+  const [isAiThinking, setIsAiThinking] = useState(false);
 
   // Node Drag & Drop State
   const [nodePositions, setNodePositions] = useState({});
@@ -152,6 +159,42 @@ export default function RiskGraphCanvas({ repo, onBack }) {
       }
     }
   };
+
+  const sendAIQuery = async (promptText) => {
+    setIsCopilotMenuOpen(false);
+    setIsChatPanelOpen(true);
+
+    const userMsg = { role: 'user', content: promptText };
+    setChatMessages(prev => [...prev, userMsg]);
+    setIsAiThinking(true);
+    setChatInput('');
+
+    // session_id é o identificador único da sessão de memória deste repositório
+    const sessionId = `${repo.owner}_${repo.name}`.replace(/[^a-zA-Z0-9-_.]/g, '_');
+
+    try {
+      const res = await fetch(`${API}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: promptText,
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setChatMessages(prev => [...prev, { role: 'assistant', content: errData.detail || 'Erro ao processar sua requisição no servidor.' }]);
+      }
+    } catch (e) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Erro de comunicação com o servidor de IA.' }]);
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
 
   const openIDEModal = async (sha) => {
     setSelectedIDECommit(sha);
@@ -344,69 +387,159 @@ export default function RiskGraphCanvas({ repo, onBack }) {
         onMouseLeave={handleCanvasMouseUp}
         onClick={() => setOpenMenuSha(null)}
       >
-        {/* Container Pai dos Filtros Flutuantes */}
-        <div
-          className="absolute top-4 left-4 z-50 flex flex-col gap-2 no-pan cursor-default"
+        {/* Container Pai dos Flutuantes Top-Left */}
+        <div 
+          className="absolute top-4 left-4 z-50 flex flex-col gap-3 no-pan cursor-default"
           onMouseDown={(e) => e.stopPropagation()}
           onWheel={(e) => e.stopPropagation()}
         >
-          {/* Botão Retrátil */}
-          <button
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className="w-10 h-10 rounded-full bg-[#0d1421] border border-slate-700 shadow-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-colors"
+          {/* GRUPO FILTROS */}
+          <div className="relative flex flex-col gap-2">
+            <button 
+              onClick={() => { setIsFilterOpen(!isFilterOpen); setIsCopilotMenuOpen(false); }}
+              className="w-10 h-10 rounded-full bg-[#0d1421] border border-slate-700 shadow-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Filtros"
+            >
+              <Filter className="w-5 h-5" />
+            </button>
+
+            {isFilterOpen && (
+              <div className="absolute top-0 left-14 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-4 rounded-xl shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-left-2 w-64">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><User className="w-3 h-3" /> Autor</label>
+                  <select
+                    className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500"
+                    value={draftFilters.author}
+                    onChange={(e) => setDraftFilters(f => ({ ...f, author: e.target.value }))}
+                  >
+                    <option value="">Todos os Autores</option>
+                    {uniqueAuthors.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> A partir de</label>
+                  <input
+                    type="date"
+                    className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500 [color-scheme:dark]"
+                    value={draftFilters.date}
+                    onChange={(e) => setDraftFilters(f => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><Filter className="w-3 h-3" /> Ordenação</label>
+                  <select
+                    className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500"
+                    value={draftFilters.sort}
+                    onChange={(e) => setDraftFilters(f => ({ ...f, sort: e.target.value }))}
+                  >
+                    <option value="desc">Mais Recente</option>
+                    <option value="asc">Mais Antigo</option>
+                  </select>
+                </div>
+
+                <button
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors shadow-lg mt-1"
+                  onClick={() => {
+                    setActiveFilters(draftFilters);
+                    setIsFilterOpen(false);
+                  }}
+                >
+                  Salvar Filtros
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* GRUPO COPILOT */}
+          <div className="relative flex flex-col gap-2">
+            <button 
+              onClick={() => { setIsCopilotMenuOpen(!isCopilotMenuOpen); setIsFilterOpen(false); }}
+              className="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500 shadow-xl shadow-indigo-500/20 flex items-center justify-center text-indigo-400 hover:text-white hover:bg-indigo-600/40 transition-all"
+              title="IA Copilot"
+            >
+              <Shield className="w-5 h-5" />
+            </button>
+
+            {isCopilotMenuOpen && (
+              <div className="absolute top-0 left-14 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2 rounded-xl shadow-2xl flex flex-col gap-1 w-64 animate-in fade-in slide-in-from-left-2">
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2 px-2 pt-1">Ações Rápidas</div>
+                
+                <button onClick={() => sendAIQuery("Resuma os riscos deste projeto.")} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
+                  <FileText className="w-4 h-4" /> Resumir Riscos
+                </button>
+                <button onClick={() => sendAIQuery("Analise a segurança dos commits mais recentes (SAST).")} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
+                  <Activity className="w-4 h-4" /> Analisar SAST
+                </button>
+                <div className="h-px bg-white/5 my-1" />
+                <button onClick={() => { setIsCopilotMenuOpen(false); setIsChatPanelOpen(true); }} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                  <MessageSquare className="w-4 h-4" /> Chat Livre
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Painel de Chat Fixo Lateral */}
+        {isChatPanelOpen && (
+          <div 
+            id="ai-chat-panel"
+            className="absolute top-32 left-4 z-40 w-96 h-[65vh] flex flex-col bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl animate-in fade-in slide-in-from-left-4 no-pan"
+            onMouseDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
           >
-            <Filter className="w-5 h-5" />
-          </button>
-
-          {/* Painel de Filtros */}
-          {isFilterOpen && (
-            <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-4 rounded-xl shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 w-64">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><User className="w-3 h-3" /> Autor</label>
-                <select
-                  className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500"
-                  value={draftFilters.author}
-                  onChange={(e) => setDraftFilters(f => ({ ...f, author: e.target.value }))}
-                >
-                  <option value="">Todos os Autores</option>
-                  {uniqueAuthors.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+            {/* Header */}
+            <div className="h-14 border-b border-white/10 flex items-center justify-between px-4 shrink-0 bg-indigo-900/20 rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-indigo-400" />
+                <span className="font-semibold text-sm text-indigo-100">Gemini Security Copilot</span>
               </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> A partir de</label>
-                <input
-                  type="date"
-                  className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500 [color-scheme:dark]"
-                  value={draftFilters.date}
-                  onChange={(e) => setDraftFilters(f => ({ ...f, date: e.target.value }))}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1"><Filter className="w-3 h-3" /> Ordenação</label>
-                <select
-                  className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-purple-500"
-                  value={draftFilters.sort}
-                  onChange={(e) => setDraftFilters(f => ({ ...f, sort: e.target.value }))}
-                >
-                  <option value="desc">Mais Recente</option>
-                  <option value="asc">Mais Antigo</option>
-                </select>
-              </div>
-
-              <button
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors shadow-lg mt-1"
-                onClick={() => {
-                  setActiveFilters(draftFilters);
-                  setIsFilterOpen(false);
-                }}
-              >
-                Salvar Filtros
+              <button onClick={() => setIsChatPanelOpen(false)} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
               </button>
             </div>
-          )}
-        </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[90%] p-3 text-[13px] leading-relaxed shadow-md ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 'bg-slate-800 text-gray-200 border border-slate-700 rounded-2xl rounded-tl-sm'}`}>
+                    <pre className="whitespace-pre-wrap font-sans break-words">{msg.content}</pre>
+                  </div>
+                </div>
+              ))}
+              {isAiThinking && (
+                <div className="flex items-start">
+                  <div className="p-4 rounded-2xl rounded-tl-sm bg-slate-800 text-gray-400 border border-slate-700 flex items-center gap-1.5 shadow-md">
+                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" />
+                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-3 border-t border-white/10 bg-[#0d1421] rounded-b-xl shrink-0">
+              <form 
+                onSubmit={(e) => { e.preventDefault(); if (chatInput.trim()) sendAIQuery(chatInput); }}
+                className="relative flex items-center"
+              >
+                <input 
+                  type="text" 
+                  className="w-full bg-[#060b13] border border-slate-700 rounded-lg pl-3 pr-10 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition-colors"
+                  placeholder="Mensagem para o Gemini..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                />
+                <button type="submit" disabled={!chatInput.trim() || isAiThinking} className="absolute right-2 p-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-white/5 rounded-md disabled:opacity-50 transition-colors">
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         <div
           id="risk-graph-canvas"

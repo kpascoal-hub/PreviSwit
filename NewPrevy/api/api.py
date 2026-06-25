@@ -17,6 +17,7 @@ from api.routers.assets       import router as assets_router
 from api.routers.engagements  import router as engagements_router
 from api.routers.findings     import router as findings_router
 from api.routers.ai_insights  import router as ai_router
+from api.routers.ai_chat      import router as ai_chat_router   # ← Novo Cerebro Central
 from api.routers.risk         import router as risk_router
 from api.routers.reports      import router as reports_router
 from api.routers.integrations import router as integrations_router
@@ -59,6 +60,7 @@ app.include_router(assets_router,       prefix="/api/v1", tags=["Assets & Produc
 app.include_router(engagements_router,  prefix="/api/v1", tags=["Engagements & Scans"])
 app.include_router(findings_router,     prefix="/api/v1", tags=["Findings & Triage"])
 app.include_router(ai_router,           prefix="/api/v1", tags=["AI & Insights"])
+app.include_router(ai_chat_router,      prefix="/api/v1", tags=["AI Chat (Copilot)"])
 app.include_router(risk_router,         prefix="/api/v1", tags=["Risk & Posture"])
 app.include_router(reports_router,      prefix="/api/v1", tags=["Reports"])
 app.include_router(integrations_router, prefix="/api/v1", tags=["Integrations"])
