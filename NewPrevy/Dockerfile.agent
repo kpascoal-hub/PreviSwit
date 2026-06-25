@@ -51,9 +51,15 @@ WORKDIR /app
 COPY requirements.txt .
 # Remove o lxml do requirements pois o Kali (Python 3.13) falha ao compilar lxml 4.9. O python3-lxml do apt já o resolve.
 RUN sed -i '/lxml/d' requirements.txt \
-    && pip3 install --no-cache-dir --break-system-packages \
-       semgrep checkov \
-       -r requirements.txt
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Instala semgrep e checkov via pipx (ambientes isolados — sem conflito com packaging do sistema)
+RUN pip3 install --no-cache-dir --break-system-packages pipx \
+    && python3 -m pipx install semgrep \
+    && python3 -m pipx install checkov
+
+# Garante que os binários do pipx estejam no PATH
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Copia código-fonte do agente
 COPY . .
