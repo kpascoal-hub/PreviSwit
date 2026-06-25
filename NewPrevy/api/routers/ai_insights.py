@@ -2,32 +2,27 @@
 PreviSwit AI-ASPM — Router: AI Insights (Command Center)
 Recomendações de remediação, Threat Intelligence e Chat Gemini.
 """
-from fastapi import APIRouter, HTTPException
-import os
+from fastapi import APIRouter, HTTPException, Header
 import json
 from datetime import datetime
 
 router = APIRouter(prefix="/ai", tags=["AI & Insights"])
 
-# Tentativa de importar o Gemini SDK (opcional — degrada graciosamente se ausente)
 try:
-    import google.generativeai as genai
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        _gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-    else:
-        _gemini_model = None
+    from google import genai
+    from google.genai import types
+    _SDK_AVAILABLE = True
 except ImportError:
-    _gemini_model = None
+    _SDK_AVAILABLE = False
 
 
-def _call_gemini(prompt: str) -> str:
-    """Chama o Gemini e retorna a resposta em texto. Retorna fallback se indisponível."""
-    if not _gemini_model:
-        return "⚠️ Motor IA indisponível. Configure GEMINI_API_KEY para habilitar insights."
+def _call_gemini(prompt: str, api_key: str) -> str:
+    """Chama o Gemini dinamicamente e retorna a resposta em texto."""
+    if not _SDK_AVAILABLE:
+        return "⚠️ Motor IA indisponível. SDK google-genai não instalado."
     try:
-        response = _gemini_model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return response.text
     except Exception as e:
         return f"Erro ao consultar IA: {str(e)}"
@@ -36,11 +31,14 @@ def _call_gemini(prompt: str) -> str:
 # ── Remediação Guiada ──────────────────────────────────────────────────────────
 
 @router.post("/remediation", summary="Gerar recomendação de correção para um finding")
-def generate_remediation(body: dict):
+def generate_remediation(body: dict, x_gemini_key: str = Header(default=None, alias="X-Gemini-Key")):
     """
     Recebe os dados de um finding e retorna um playbook de remediação
     personalizado gerado pelo Gemini, incluindo código corrigido quando aplicável.
     """
+    if not x_gemini_key:
+        raise HTTPException(status_code=401, detail="⚠️ Motor IA indisponível. Configure a chave do Gemini na interface.")
+
     title = body.get("title", "vulnerabilidade desconhecida")
     severity = body.get("severity", "MEDIUM")
     description = body.get("description", "")
@@ -68,25 +66,28 @@ Analise a vulnerabilidade abaixo e gere um playbook de remediação detalhado em
 
 Seja específico, prático e direto ao ponto."""
 
-    ai_response = _call_gemini(prompt)
+    ai_response = _call_gemini(prompt, api_key=x_gemini_key)
     return {
         "finding_title": title,
         "severity": severity,
         "cve_id": cve_id,
         "remediation_playbook": ai_response,
         "generated_at": datetime.utcnow().isoformat(),
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.5-flash",
     }
 
 
 # ── Threat Intelligence ────────────────────────────────────────────────────────
 
 @router.post("/threat-intel", summary="Análise de Threat Intelligence para um CVE ou finding")
-def threat_intelligence(body: dict):
+def threat_intelligence(body: dict, x_gemini_key: str = Header(default=None, alias="X-Gemini-Key")):
     """
     Correlaciona um CVE ou finding com MITRE ATT&CK, OWASP Top 10 e
     tendências de exploração em campo.
     """
+    if not x_gemini_key:
+        raise HTTPException(status_code=401, detail="⚠️ Motor IA indisponível. Configure a chave do Gemini na interface.")
+
     cve_id = body.get("cve_id", "")
     title = body.get("title", "")
     description = body.get("description", "")
@@ -116,7 +117,7 @@ Analise o seguinte CVE/vulnerabilidade e forneça inteligência de ameaças deta
 
 Responda APENAS com o JSON válido, sem texto adicional."""
 
-    ai_response = _call_gemini(prompt)
+    ai_response = _call_gemini(prompt, api_key=x_gemini_key)
 
     # Tenta parsear como JSON; se falhar, retorna como string
     try:
@@ -135,11 +136,14 @@ Responda APENAS com o JSON válido, sem texto adicional."""
 # ── Chat Conversacional ────────────────────────────────────────────────────────
 
 @router.post("/chat", summary="Chat conversacional sobre postura de segurança")
-def ai_chat(body: dict):
+def ai_chat(body: dict, x_gemini_key: str = Header(default=None, alias="X-Gemini-Key")):
     """
     Interface conversacional com o Gemini para perguntas sobre o estado
     de segurança da organização. Contexto de findings pode ser injetado.
     """
+    if not x_gemini_key:
+        raise HTTPException(status_code=401, detail="⚠️ Motor IA indisponível. Configure a chave do Gemini na interface.")
+
     user_message = body.get("message", "")
     context_findings = body.get("context_findings", [])
     conversation_history = body.get("history", [])
@@ -167,7 +171,7 @@ Seja claro, técnico mas acessível, e sempre em português.
         full_prompt += f"{role}: {msg.get('content', '')}\n"
     full_prompt += f"Usuário: {user_message}\nAssistente:"
 
-    ai_response = _call_gemini(full_prompt)
+    ai_response = _call_gemini(full_prompt, api_key=x_gemini_key)
 
     return {
         "message": user_message,
@@ -180,11 +184,14 @@ Seja claro, técnico mas acessível, e sempre em português.
 # ── Análise de Risco por IA ────────────────────────────────────────────────────
 
 @router.post("/risk-analysis", summary="Análise de risco global por IA")
-def risk_analysis(body: dict):
+def risk_analysis(body: dict, x_gemini_key: str = Header(default=None, alias="X-Gemini-Key")):
     """
     Analisa o conjunto de findings de um ativo e gera um score de risco
     com justificativa e recomendações prioritárias.
     """
+    if not x_gemini_key:
+        raise HTTPException(status_code=401, detail="⚠️ Motor IA indisponível. Configure a chave do Gemini na interface.")
+
     asset_name = body.get("asset_name", "ativo não identificado")
     findings = body.get("findings", [])
 
@@ -213,7 +220,7 @@ Calcule e retorne em JSON:
 
 Responda APENAS com JSON válido."""
 
-    ai_response = _call_gemini(prompt)
+    ai_response = _call_gemini(prompt, api_key=x_gemini_key)
 
     try:
         risk_data = json.loads(ai_response)

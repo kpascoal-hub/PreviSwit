@@ -36,7 +36,7 @@ _SYSTEM_INSTRUCTION = (
 )
 
 
-class AIManager:
+class MapaMentalAgent:
     """
     Cérebro Central de IA para o PreviSwit.
     
@@ -45,32 +45,20 @@ class AIManager:
     """
 
     def __init__(self):
-        self._client: Optional[object] = None
-        self._api_key = os.getenv("GEMINI_API_KEY", "")
         self._model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         # Cache em memória dos históricos de sessão carregados do disco
         self._session_cache: dict[str, list] = {}
 
         if not _SDK_AVAILABLE:
             logger.error("SDK google-genai não disponível. Instale: pip install google-genai")
-        elif not self._api_key:
-            logger.warning("GEMINI_API_KEY não configurada. IA desabilitada.")
-        else:
-            try:
-                self._client = genai.Client(api_key=self._api_key)
-                logger.info(f"AIManager inicializado com modelo {self._model}")
-            except Exception as e:
-                logger.error(f"Falha ao inicializar genai.Client: {e}")
 
     @property
     def is_available(self) -> bool:
-        return self._client is not None
+        return _SDK_AVAILABLE
 
     def _unavailable_msg(self) -> str:
         if not _SDK_AVAILABLE:
             return "⚠️ SDK google-genai não instalado no servidor."
-        if not self._api_key:
-            return "⚠️ GEMINI_API_KEY não configurada. Acesse as Configurações da plataforma para habilitar o Copilot de IA."
         return "⚠️ Cliente de IA indisponível. Tente novamente em instantes."
 
     # ── Método 1: Stateless ───────────────────────────────────────────────────
@@ -78,6 +66,7 @@ class AIManager:
     async def generate_insight(
         self,
         prompt: str,
+        api_key: str,
         system_instruction: str = ""
     ) -> str:
         """
@@ -86,12 +75,16 @@ class AIManager:
         """
         if not self.is_available:
             return self._unavailable_msg()
+            
+        if not api_key:
+            return "⚠️ Chave do Gemini não fornecida. Configure em Integrações."
 
         sys_instr = system_instruction or _SYSTEM_INSTRUCTION
 
         try:
+            client = genai.Client(api_key=api_key)
             response = await asyncio.to_thread(
-                self._client.models.generate_content,
+                client.models.generate_content,
                 model=self._model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -141,7 +134,7 @@ class AIManager:
         except Exception as e:
             logger.warning(f"Falha ao salvar histórico de {session_id}: {e}")
 
-    async def chat_with_memory(self, session_id: str, prompt: str) -> str:
+    async def chat_with_memory(self, session_id: str, prompt: str, api_key: str, context: str = "") -> str:
         """
         Envia uma mensagem para o Gemini mantendo histórico persistente
         por session_id. Cada session_id tem seu próprio arquivo de memória
@@ -149,6 +142,9 @@ class AIManager:
         """
         if not self.is_available:
             return self._unavailable_msg()
+            
+        if not api_key:
+            return "⚠️ Chave do Gemini não fornecida. Configure em Integrações."
 
         # Carrega histórico anterior
         history = self._load_history(session_id)
@@ -157,40 +153,56 @@ class AIManager:
         contents: list[dict] = []
         for msg in history:
             contents.append(msg)
-        contents.append({"role": "user", "parts": [{"text": prompt}]})
-
-        try:
-            response = await asyncio.to_thread(
-                self._client.models.generate_content,
-                model=self._model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM_INSTRUCTION,
-                    temperature=0.4,
-                    max_output_tokens=2048,
-                ),
+            
+        final_prompt = prompt
+        if context.strip():
+            final_prompt = (
+                "REGRA ABSOLUTA: Você é o AI Security Copilot integrado à tela de Mapa Mental de Commits. "
+                "Você DEVE basear sua resposta EXCLUSIVAMENTE nos dados fornecidos no [CONTEXTO VISUAL DA TELA] abaixo. "
+                "NUNCA sugira ao usuário acessar o GitHub, repositórios externos ou usar outras ferramentas. "
+                "Se a resposta para a pergunta não estiver no contexto abaixo, diga apenas que as informações não estão visíveis no mapa atual.\n\n"
+                f"[CONTEXTO VISUAL DA TELA]\n{context}\n\n"
+                f"Pergunta do usuário: {prompt}"
             )
-            answer = response.text.strip()
+            
+        contents.append({"role": "user", "parts": [{"text": final_prompt}]})
 
-            # Salva a nova dupla de mensagens no histórico
-            history.append({"role": "user", "parts": [{"text": prompt}]})
-            history.append({"role": "model", "parts": [{"text": answer}]})
+        client = genai.Client(api_key=api_key)
+        
+        # Armadura de Resiliência: 3 Tentativas em caso de 503 / Falhas de Demanda
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self._model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_SYSTEM_INSTRUCTION,
+                        temperature=0.4,
+                        max_output_tokens=2048,
+                    ),
+                )
+                answer = response.text.strip()
+                
+                # Salva a nova dupla de mensagens no histórico (salva o prompt real sem a trava pesada pra não poluir)
+                history.append({"role": "user", "parts": [{"text": prompt}]})
+                history.append({"role": "model", "parts": [{"text": answer}]})
 
-            # Mantém no máximo 40 mensagens (20 turnos) para evitar context overflow
-            if len(history) > 40:
-                history = history[-40:]
+                # Mantém no máximo 40 mensagens (20 turnos) para evitar context overflow
+                if len(history) > 40:
+                    history = history[-40:]
 
-            self._save_history(session_id, history)
-            return answer
+                self._save_history(session_id, history)
+                return answer
 
-        except Exception as e:
-            err = str(e)
-            logger.error(f"chat_with_memory falhou para session '{session_id}': {err}")
-            if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                return "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
-            if "503" in err or "UNAVAILABLE" in err:
-                return "⚠️ Serviço Gemini temporariamente indisponível."
-            return f"⚠️ Erro ao consultar IA: {err}"
+            except Exception as e:
+                err = str(e)
+                logger.warning(f"[WARN] API sobrecarregada ou falha (Tentativa {attempt + 1}/3): {err}")
+                if attempt < 2:
+                    await asyncio.sleep(5)
+                else:
+                    logger.error(f"chat_with_memory falhou definitivamente após 3 tentativas: {err}")
+                    return "⚠️ O servidor da IA está com alta demanda no momento (Erro 503). Por favor, aguarde alguns segundos e tente novamente."
 
     def clear_session(self, session_id: str) -> None:
         """Apaga o histórico de uma sessão do cache e do disco."""
@@ -203,4 +215,4 @@ class AIManager:
 
 # ── Instância Global ──────────────────────────────────────────────────────────
 # Importe esta instância em qualquer router: from core.ai_manager import ai_core
-ai_core = AIManager()
+mapa_mental_agent = MapaMentalAgent()

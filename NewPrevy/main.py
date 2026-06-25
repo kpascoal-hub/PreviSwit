@@ -772,7 +772,12 @@ def run_api_security_analysis(source: str = None, target_url: str = None):
     print_status(f"Schema carregado: {len(schema_text):,} caracteres.", "INFO")
 
     # ── Envia para o Gemini ──────────────────────────────────────────────
-    result = analyze_api_security(schema_text)
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_api_key:
+        print_status("⚠  GEMINI_API_KEY não definida. Análise falhou.", "ERROR")
+        return {"error": "GEMINI_API_KEY ausente", "insight": None, "payload": None}
+
+    result = analyze_api_security(schema_text, api_key=gemini_api_key)
 
     # ── Exibe resultado no terminal ──────────────────────────────────────
     print_status("", "INFO")

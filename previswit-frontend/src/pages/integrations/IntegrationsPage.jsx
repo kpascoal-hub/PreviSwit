@@ -563,11 +563,50 @@ export default function IntegrationsPage() {
 
       {/* ── Tab: APIs & IA ──────────────────────────────────────────────── */}
       {tab === 'api' && (
-        <IntegrationSection
-          title="🔑 Integrações de API & IA"
-          items={data?.api_integrations}
-          loading={loading}
-        />
+        <div className="space-y-6">
+          <div className="bg-[#0d1421] border border-white/5 rounded-xl p-6 shadow-lg max-w-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30">
+                <span className="text-indigo-400 font-bold text-lg">G</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white">Google Gemini API (BYOK)</h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-4">
+              Insira sua chave de API para habilitar o AI Copilot. A chave será enviada via Header (X-Gemini-Key).
+            </p>
+            <div className="flex flex-col gap-3">
+              <input 
+                type="password" 
+                id="gemini-key-input" 
+                placeholder="AIzaSy..." 
+                className="w-72 bg-[#101828] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              />
+              <button 
+                onClick={(e) => {
+                  const key = document.getElementById('gemini-key-input').value.trim();
+                  sessionStorage.setItem('gemini_api_key', key);
+                  const btn = e.target;
+                  const originalText = btn.innerText;
+                  btn.innerText = '✅ Chave Salva!';
+                  btn.classList.add('bg-green-600');
+                  setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('bg-green-600');
+                  }, 2000);
+                }}
+                className="w-72 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Salvar Chave
+              </button>
+            </div>
+          </div>
+          
+          <IntegrationSection
+            title="🔑 Outras APIs & IA"
+            items={data?.api_integrations}
+            loading={loading}
+          />
+        </div>
       )}
 
       {/* ── Tab: Configuradas ───────────────────────────────────────────── */}

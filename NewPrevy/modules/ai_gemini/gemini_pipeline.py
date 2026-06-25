@@ -94,8 +94,8 @@ class GeminiAttacker:
     Lê achados anteriores, pede para a IA gerar payloads e dispara requests.
     """
 
-    def __init__(self, model_name: str = MODEL_NAME):
-        self.api_key = os.getenv("GEMINI_API_KEY", "AIzaSyCQgAZkq1OLZvq7ISHCWM2-1hS_e8dIuxk")
+    def __init__(self, api_key: str, model_name: str = MODEL_NAME):
+        self.api_key = api_key
         self.model_name = model_name
         self.client = None
 
@@ -350,7 +350,11 @@ class GeminiAttacker:
 def run_offensive_ai(scan_results: dict) -> dict:
     """Entrypoint Pipeline 6 — Motor Ofensivo."""
     print_status("[PIPELINE 6] Gemini Active Attacker", "CRIT")
-    attacker = GeminiAttacker()
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        print_status("⚠  GEMINI_API_KEY não definida. Pipeline 6 pulado.", "WARN")
+        return {"confirmed_vulnerabilities": []}
+    attacker = GeminiAttacker(api_key=api_key)
     return attacker.run_offensive_ai(scan_results)
 
 def run_gemini_overwatch(scan_results: dict) -> dict:
@@ -391,18 +395,17 @@ Retorne EXCLUSIVAMENTE um JSON válido com DUAS chaves:
 """
 
 
-def analyze_api_security(api_schema_text: str) -> dict:
+def analyze_api_security(api_schema_text: str, api_key: str) -> dict:
     """
     Analisa o schema de uma API usando o Gemini como Hacker Especialista.
 
     Args:
         api_schema_text: Texto do schema/especificação da API (Swagger, OpenAPI, etc.)
+        api_key: Chave de API do Gemini
 
     Returns:
         dict com as chaves 'insight' e 'payload', ou dict de erro.
     """
-    api_key = os.getenv("GEMINI_API_KEY", "AIzaSyCQgAZkq1OLZvq7ISHCWM2-1hS_e8dIuxk")
-
     if not api_key:
         print_status("⚠  GEMINI_API_KEY não definida. Análise de API impossível.", "WARN")
         return {"error": "GEMINI_API_KEY não configurada", "insight": None, "payload": None}

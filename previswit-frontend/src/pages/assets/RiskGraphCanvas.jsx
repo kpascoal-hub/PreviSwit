@@ -32,9 +32,10 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   // AI Copilot States
   const [isCopilotMenuOpen, setIsCopilotMenuOpen] = useState(false);
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', content: 'Olá! Sou seu Copilot de Segurança. O que vamos auditar hoje?' }]);
+  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', content: 'Olá! Sou seu **Copilot de Segurança**. O que vamos auditar hoje?' }]);
   const [chatInput, setChatInput] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const chatEndRef = useRef(null); // Ancora de auto-scroll
 
   // Node Drag & Drop State
   const [nodePositions, setNodePositions] = useState({});
@@ -160,7 +161,26 @@ export default function RiskGraphCanvas({ repo, onBack }) {
     }
   };
 
+  // Formata texto com Markdown básico para as bolhas do chat
+  const formatChatText = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')           // **negrito**
+      .replace(/`([^`]+)`/g, '<code class="bg-black/30 px-1 rounded text-xs font-mono">$1</code>') // `code`
+      .replace(/\n/g, '<br />')                                    // quebras de linha
+      .replace(/^\s*[-•]\s(.+)/gm, '<span class="block pl-2 before:content-[\'•\'] before:mr-1">$1</span>'); // listas
+  };
+
   const sendAIQuery = async (promptText) => {
+    // Validação BYOK (Bring Your Own Key) via Sessão
+    const geminiKey = sessionStorage.getItem('gemini_api_key');
+    console.log("[DEBUG IA] Chave resgatada da sessão:", geminiKey ? "SIM" : "NÃO");
+
+    if (!geminiKey) {
+      alert("⚠️ Configuração Pendente: Insira sua GEMINI_API_KEY na aba de Integrações.");
+      return;
+    }
+
     setIsCopilotMenuOpen(false);
     setIsChatPanelOpen(true);
 
@@ -169,32 +189,62 @@ export default function RiskGraphCanvas({ repo, onBack }) {
     setIsAiThinking(true);
     setChatInput('');
 
+    // Auto-scroll para a mensagem do usuário
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
     // session_id é o identificador único da sessão de memória deste repositório
     const sessionId = `${repo.owner}_${repo.name}`.replace(/[^a-zA-Z0-9-_.]/g, '_');
+
+    // 1. DOM Scraping: Captura contexto da tela do Mapa Mental
+    const commitCards = document.querySelectorAll('[data-commit="true"]');
+    let screenContext = "";
+    commitCards.forEach(card => {
+      const author = card.getAttribute('data-author') || "";
+      const date = card.getAttribute('data-date') || "";
+      const msg = card.getAttribute('data-message') || "";
+      const branch = card.getAttribute('data-branch') || "";
+      screenContext += `[Commit na Tela] Branch: ${branch} | Autor: ${author} | Data: ${date} | Msg: ${msg}\n`;
+    });
 
     try {
       const res = await fetch(`${API}/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': geminiKey 
+        },
         body: JSON.stringify({
           session_id: sessionId,
           message: promptText,
+          context: screenContext
         })
       });
+
       if (res.ok) {
         const data = await res.json();
         setChatMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
       } else {
         const errData = await res.json().catch(() => ({}));
-        setChatMessages(prev => [...prev, { role: 'assistant', content: errData.detail || 'Erro ao processar sua requisição no servidor.' }]);
+        setChatMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ ${errData.detail || 'Erro ao processar a requisição no servidor.'}`
+        }]);
       }
     } catch (e) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Erro de comunicação com o servidor de IA.' }]);
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '⚠️ Erro de comunicação com o servidor de IA. Verifique se o backend está rodando.'
+      }]);
     } finally {
       setIsAiThinking(false);
+      // Auto-scroll para a resposta da IA forçando scrollTop no container
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const container = document.getElementById('chat-messages-container');
+        if (container) container.scrollTop = container.scrollHeight;
+      }, 100);
     }
   };
-
 
   const openIDEModal = async (sha) => {
     setSelectedIDECommit(sha);
@@ -501,7 +551,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+            <div id="chat-messages-container" className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div className={`max-w-[90%] p-3 text-[13px] leading-relaxed shadow-md ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 'bg-slate-800 text-gray-200 border border-slate-700 rounded-2xl rounded-tl-sm'}`}>
@@ -605,6 +655,11 @@ export default function RiskGraphCanvas({ repo, onBack }) {
               <React.Fragment key={commit.sha}>
                 {/* Commit Card */}
                 <div
+                  data-commit="true"
+                  data-author={commit.author}
+                  data-date={commit.date}
+                  data-message={commit.message}
+                  data-branch={commit.branch_name}
                   className={`no-pan absolute flex flex-col resize overflow-hidden w-72 min-h-[200px] h-auto max-h-[500px] bg-slate-900/90 rounded-lg shadow-xl text-sm
                              ${isMain ? 'border border-slate-700 hover:shadow-purple-500/10' : 'border border-amber-500/40 hover:shadow-amber-500/10'}`}
                   style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)', zIndex: pos.zIndex }}
