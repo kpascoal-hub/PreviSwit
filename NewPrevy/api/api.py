@@ -25,6 +25,7 @@ from api.routers.integrations import router as integrations_router
 from api.routers.github import router as github_router
 from api.routers.aspm_parsers import router as aspm_parsers_router
 from api.routers.settings     import router as settings_router
+from api.routers.sast         import router as sast_router          # ← SAST Dispatch (Agente)
 from config import Config
 
 app = FastAPI(
@@ -76,6 +77,7 @@ app.include_router(integrations_router, prefix="/api/v1", tags=["Integrations"])
 app.include_router(aspm_parsers_router, prefix="/api/v1", tags=["ASPM Parsers (SAST/Secrets/IaC)"])
 app.include_router(github_router,       prefix="/api/v1", tags=["GitHub"])
 app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
+app.include_router(sast_router,         prefix="/api/v1", tags=["SAST Dispatch (Agent)"])
 
 
 class ScanRequest(BaseModel):
@@ -195,10 +197,23 @@ async def websocket_dashboard(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            if data.get("action") == "START_SCAN":
-                # Encaminha o pedido de scan para o agente_01
-                await manager.send_to_agent("agent_01", data)
-                await manager.send_to_dashboard({"action": "LOG", "message": "🚀 Comando enviado para o Agente_01"})
+            action = data.get("action")
+
+            # Ações que devem ser encaminhadas diretamente ao agente
+            _AGENT_ACTIONS = {
+                "START_SCAN",
+                "RUN_SEMGREP",
+                "RUN_GITLEAKS",
+                "RUN_CHECKOV",
+            }
+
+            if action in _AGENT_ACTIONS:
+                agent_id = data.get("agent_id", "agent_01")
+                await manager.send_to_agent(agent_id, data)
+                await manager.send_to_dashboard({
+                    "action": "LOG",
+                    "message": f"🚀 Comando '{action}' enviado para '{agent_id}'",
+                })
     except WebSocketDisconnect:
         manager.disconnect_dashboard()
 
