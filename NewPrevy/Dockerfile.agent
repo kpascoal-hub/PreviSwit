@@ -1,7 +1,7 @@
 # =============================================================================
 # Dockerfile — previswit-agent
-# Base: Kali Linux Rolling | Framework de Pentest
-# Ferramentas: Nmap, Gobuster, Nuclei, Trivy + Python 3
+# Base: Kali Linux Rolling | Framework de Pentest + SAST
+# Ferramentas: Nmap, Gobuster, Nuclei, Trivy, Semgrep, Gitleaks, Checkov + Python 3
 # =============================================================================
 FROM kalilinux/kali-rolling:latest
 
@@ -36,12 +36,23 @@ RUN NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nucle
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin
 
+# Instala Gitleaks (última versão via GitHub Releases)
+RUN GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+        | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && wget -qO /tmp/gitleaks.tar.gz \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
+    && rm /tmp/gitleaks.tar.gz \
+    && chmod +x /usr/local/bin/gitleaks
+
 WORKDIR /app
 
-# Instala dependências Python do agente (permitindo break-system-packages devido ao pip no kali)
+# Instala dependências Python do agente + ferramentas SAST
 COPY requirements.txt .
 # Remove o lxml do requirements pois o Kali (Python 3.13) falha ao compilar lxml 4.9. O python3-lxml do apt já o resolve.
-RUN sed -i '/lxml/d' requirements.txt && pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+RUN sed -i '/lxml/d' requirements.txt \
+    && pip3 install --no-cache-dir --break-system-packages -r requirements.txt \
+    && pip3 install --no-cache-dir --break-system-packages semgrep checkov
 
 # Copia código-fonte do agente
 COPY . .

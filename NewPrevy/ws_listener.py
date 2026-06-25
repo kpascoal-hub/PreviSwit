@@ -1,9 +1,12 @@
 """
 PreviSwit — WebSocket Listener (Rádio Comunicador com a Nuvem)
 
-Conecta-se ao servidor Render via WebSocket e aguarda ordens de scan.
-Quando recebe {"action": "START_SCAN", "target": "URL"}, executa o pipeline
-completo e devolve o resultado + caminhos dos relatórios.
+Conecta-se ao servidor via WebSocket e aguarda ordens de scan.
+Comandos suportados:
+  - {"action": "START_SCAN",   "target": "..."}       Pipeline completo
+  - {"action": "RUN_SEMGREP",  "target": "/path/..."}  SAST genérico
+  - {"action": "RUN_GITLEAKS", "target": "/path/..."}  Detecção de segredos
+  - {"action": "RUN_CHECKOV",  "target": "/path/..."}  Análise de IaC
 
 Uso: python ws_listener.py
 """
@@ -17,8 +20,11 @@ from datetime import datetime, timezone
 
 import websockets
 
-# ─── Módulo de saúde e capacidades ──────────────────────────────────────────
+# ─── Módulo de saúde e capacidades ────────────────────────────────────────────
 from modules.system.health import get_agent_capabilities
+
+# ─── Runners SAST individuais ───────────────────────────────────────────
+from core.scanners.sast_runner import run_semgrep, run_gitleaks, run_checkov
 
 # ─── Configuração ───────────────────────────────────────────────────────────
 WS_URI = os.getenv(
@@ -156,7 +162,61 @@ async def handle_message(ws, raw: str):
 
         await ws.send(json.dumps(response, default=str))
 
-    # ── PING / outros ──────────────────────────────────────────────────
+    # ── RUN_SEMGREP ───────────────────────────────────────────────
+    elif action == "RUN_SEMGREP" and target:
+        log.info("💿 [SAST] Semgrep solicitado para: %s", target)
+        await ws.send(json.dumps({"agent": AGENT_ID, "action": "SCAN_STARTED", "tool": "semgrep", "target": target}))
+        try:
+            data = await run_semgrep(target)
+        except Exception as exc:
+            log.exception("Erro inesperado no handler RUN_SEMGREP")
+            data = {"status": "error", "tool": "semgrep", "reason": str(exc)}
+        await ws.send(json.dumps({
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "tool":   "semgrep",
+            "target": target,
+            "data":   data,
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }, default=str))
+
+    # ── RUN_GITLEAKS ──────────────────────────────────────────────
+    elif action == "RUN_GITLEAKS" and target:
+        log.info("🔑 [SAST] Gitleaks solicitado para: %s", target)
+        await ws.send(json.dumps({"agent": AGENT_ID, "action": "SCAN_STARTED", "tool": "gitleaks", "target": target}))
+        try:
+            data = await run_gitleaks(target)
+        except Exception as exc:
+            log.exception("Erro inesperado no handler RUN_GITLEAKS")
+            data = {"status": "error", "tool": "gitleaks", "reason": str(exc)}
+        await ws.send(json.dumps({
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "tool":   "gitleaks",
+            "target": target,
+            "data":   data,
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }, default=str))
+
+    # ── RUN_CHECKOV ──────────────────────────────────────────────
+    elif action == "RUN_CHECKOV" and target:
+        log.info("🏗️  [SAST] Checkov solicitado para: %s", target)
+        await ws.send(json.dumps({"agent": AGENT_ID, "action": "SCAN_STARTED", "tool": "checkov", "target": target}))
+        try:
+            data = await run_checkov(target)
+        except Exception as exc:
+            log.exception("Erro inesperado no handler RUN_CHECKOV")
+            data = {"status": "error", "tool": "checkov", "reason": str(exc)}
+        await ws.send(json.dumps({
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "tool":   "checkov",
+            "target": target,
+            "data":   data,
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }, default=str))
+
+    # ── PING / outros ──────────────────────────────────────────────
     elif action == "PING":
         await ws.send(json.dumps({"agent": AGENT_ID, "action": "PONG"}))
     else:

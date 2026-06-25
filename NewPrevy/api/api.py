@@ -1,7 +1,8 @@
 """
-API REST — PreviSwit AI-ASPM v4
+API REST — PreviSwit AI-ASPM v5
 Expõe todos os domínios ASPM via FastAPI: Assets, Engagements, Findings,
-AI Insights, Risk Metrics, Reports, Integrations e Settings.
+AI Insights, AI Chat Copilot (Gemini), Risk Metrics, Reports,
+GitHub Integration, ASPM Parsers (SAST/Secrets/IaC), Integrations e Settings.
 """
 import json, os, glob
 from datetime import datetime, timezone
@@ -30,17 +31,25 @@ app = FastAPI(
     title="PreviSwit AI-ASPM API",
     description=(
         "## PreviSwit — AI-Powered Application Security Posture Management\n\n"
-        "Plataforma ASPM de elite com módulos de:\n"
-        "- **Assets & Products**: Inventário de ativos digitais\n"
+        "Plataforma ASPM de elite com os seguintes módulos:\n\n"
+        "### 📦 Gestão de Ativos\n"
+        "- **Assets & Products**: Inventário completo de ativos digitais\n"
         "- **Engagements & Scans**: Histórico e orquestração de scans\n"
-        "- **Findings**: Central de triagem com deduplicação por IA\n"
-        "- **AI Insights**: Recomendações Gemini, Threat Intel e Chat\n"
-        "- **Risk Metrics**: Score evolutivo e compliance\n"
-        "- **Reports**: Relatórios executivos e técnicos\n"
-        "- **Integrations**: CI/CD, Jira, Slack e mais\n"
-        "- **Settings**: Usuários, RBAC e auditoria"
+        "- **Findings & Triage**: Central de triagem com deduplication por IA\n\n"
+        "### 🤖 Inteligência Artificial (Gemini)\n"
+        "- **AI Insights**: Remediação guiada, Threat Intelligence e Risk Analysis\n"
+        "- **AI Chat Copilot**: Chat conversacional com memória persistente por sessão/repositório\n\n"
+        "### 🕵️ Segurança & Análise\n"
+        "- **ASPM Parsers**: Ingestão e normalização de resultados SAST, Secrets e IaC\n"
+        "- **Risk Metrics**: Score evolutivo de risco e compliance\n\n"
+        "### 🔗 Integrações\n"
+        "- **GitHub Integration**: Commits, branches, diffs e análise de repositórios via BYOT\n"
+        "- **Integrations**: CI/CD, Jira, Slack e conectores externos\n\n"
+        "### ⚙️ Plataforma\n"
+        "- **Reports**: Relatórios executivos e técnicos (PDF/HTML)\n"
+        "- **Settings**: Usuários, RBAC e auditoria\n"
     ),
-    version="4.0",
+    version="5.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
