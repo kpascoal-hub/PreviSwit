@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowLeft, GitCommit, User, Clock, ShieldAlert, ChevronRight, FileCode, BrainCircuit, Code, PlusCircle, MinusCircle, GitPullRequest, GripHorizontal, X, Filter, Search, Shield, Send, Bot, FileText, Activity, MessageSquare } from 'lucide-react';
+import { ArrowLeft, GitCommit, User, Clock, ShieldAlert, ChevronRight, FileCode, BrainCircuit, Code, PlusCircle, MinusCircle, GitPullRequest, GripHorizontal, X, Trash2, Filter, Search, Shield, ShieldCheck, Zap, Send, Bot, FileText, Activity, MessageSquare } from 'lucide-react';
 
 const API = '/api/v1';
 
@@ -19,6 +19,9 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   const [activeWidgets, setActiveWidgets] = useState({});
   const [branchData, setBranchData] = useState({});
 
+  const [executiveSASTStep, setExecutiveSASTStep] = useState(0); // 0: None, 1: Choosing, 2: Typing Hash
+  const [executiveSASTHash, setExecutiveSASTHash] = useState('');
+
   // Filters State
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState({ author: '', date: '', sort: 'desc' });
@@ -36,6 +39,11 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   const [chatInput, setChatInput] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const chatEndRef = useRef(null); // Ancora de auto-scroll
+
+  // SAST Analysis States
+  const [sastResults, setSastResults] = useState({});     // { [sha]: { vulnerable, severity, analysis, tools_used, loading } }
+  const [fixedCommits, setFixedCommits] = useState({});   // { [sha]: true } — commits marcados como corrigidos
+  const [fullSastData, setFullSastData] = useState(null); // Dados brutos do Quarteto para exibição técnica
 
   // Node Drag & Drop State
   const [nodePositions, setNodePositions] = useState({});
@@ -171,6 +179,292 @@ export default function RiskGraphCanvas({ repo, onBack }) {
       .replace(/^\s*[-•]\s(.+)/gm, '<span class="block pl-2 before:content-[\'•\'] before:mr-1">$1</span>'); // listas
   };
 
+  // ─── Limpar histórico do chat (UI + memória persistida no backend) ───
+  const clearChat = async () => {
+    setChatMessages([]);
+    const sessionId = repo ? `${repo.owner}_${repo.name}`.replace(/[^a-zA-Z0-9-_.]/g, '_') : null;
+    if (!sessionId) return;
+    try {
+      await fetch(`${API}/ai/sessions/${sessionId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn('[Copilot] Falha ao limpar sessão no backend:', e);
+    }
+  };
+
+  // ─── SAST: Análise de Commit Individual ───
+  const expandSASTAnalysis = async (commit) => {
+    const sha = commit.sha;
+    setOpenMenuSha(null);
+
+    // Ativa widget 'sast' no mapa mental para criar o card filho
+    setActiveWidgets(prev => {
+      const current = prev[sha] || [];
+      if (current.includes('sast')) return prev;
+      return { ...prev, [sha]: [...current, 'sast'] };
+    });
+
+    // Marca como carregando
+    setSastResults(prev => ({ ...prev, [sha]: { loading: true } }));
+
+    const geminiKey = sessionStorage.getItem('gemini_api_key');
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+
+    try {
+      // Busca os arquivos/patch do commit se ainda não temos
+      let files = branchData[sha]?.files || [];
+      if (!files.length && token) {
+        const r = await fetch(`${API}/github/repos/${repo.owner}/${repo.name}/commits/${sha}`, {
+          headers: { 'X-GitHub-Token': token }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setBranchData(prev => ({ ...prev, [sha]: d }));
+          files = d.files || [];
+        }
+      }
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (geminiKey) headers['X-Gemini-Key'] = geminiKey;
+
+      const res = await fetch(`${API}/sast/analyze-commit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sha:     sha,
+          message: commit.message,
+          author:  commit.author,
+          date:    commit.date,
+          branch:  commit.branch_name,
+          files:   files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
+          repo_url: `https://github.com/${repo.owner}/${repo.name}.git`
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Salva resultados técnicos e garante que `analysis` está nulo inicialmente
+      setSastResults(prev => ({ ...prev, [sha]: { ...data, loading: false, analysis: null } }));
+    } catch (e) {
+      setSastResults(prev => ({ ...prev, [sha]: {
+        loading: false,
+        vulnerable: null,
+        severity: 'ERROR',
+        scanner_results: [],
+        analysis: `⚠️ Falha ao executar análise técnica: ${e.message}`,
+        tools_used: []
+      }}));
+    }
+  };
+
+  const showFullScannerResults = (scannerData) => {
+    setFullSastData(scannerData);
+  };
+
+  const requestAIValidation = async (commit) => {
+    const sha = commit.sha;
+    setSastResults(prev => ({
+      ...prev,
+      [sha]: { ...prev[sha], aiLoading: true }
+    }));
+
+    const geminiKey = sessionStorage.getItem('gemini_api_key');
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+
+    try {
+      let files = branchData[sha]?.files || [];
+      if (!files.length && token) {
+        const r = await fetch(`${API}/github/repos/${repo.owner}/${repo.name}/commits/${sha}`, {
+          headers: { 'X-GitHub-Token': token }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setBranchData(prev => ({ ...prev, [sha]: d }));
+          files = d.files || [];
+        }
+      }
+
+      const apiKey = sessionStorage.getItem('gemini_api_key');
+      const headers = { 
+        'Content-Type': 'application/json',
+        'X-Gemini-Key': apiKey || ''
+      };
+
+      const currentSast = sastResults[sha] || {};
+
+      const res = await fetch(`${API}/ai/validate-sast`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sha:     sha,
+          message: commit.message,
+          author:  commit.author,
+          date:    commit.date,
+          branch:  commit.branch_name,
+          files:   files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
+          scanner_results: currentSast.scanner_results || []
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      
+      setSastResults(prev => ({
+        ...prev,
+        [sha]: { ...prev[sha], aiLoading: false, analysis: data.analysis }
+      }));
+    } catch (e) {
+      setSastResults(prev => ({
+        ...prev,
+        [sha]: { ...prev[sha], aiLoading: false, analysis: `⚠️ Falha na validação IA: ${e.message}` }
+      }));
+    }
+  };
+
+  // ─── SAST Executivo (Business View) ───
+  const quickExecutiveSAST = async (type, hash) => {
+    setIsCopilotMenuOpen(false);
+    setIsChatPanelOpen(true);
+    setExecutiveSASTStep(0);
+    setExecutiveSASTHash('');
+
+    const loadingId = Date.now();
+    setChatMessages(prev => [...prev, {
+      id: loadingId,
+      role: 'assistant',
+      content: "Clonando repositório e executando Scanners Nativos...",
+      isLoading: true
+    }]);
+
+    const geminiKey = sessionStorage.getItem('gemini_api_key');
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+
+    try {
+      let targetCommits = [];
+      if (type === 'specific') {
+        const c = commits.find(x => x.sha.startsWith(hash.trim()));
+        if (!c) throw new Error("Commit não encontrado no grafo (verifique o Hash).");
+        targetCommits = [c];
+      } else {
+        // Analisa os top 5 recentes
+        targetCommits = commits.slice(0, 5);
+      }
+
+      let combinedFindings = [];
+      let combinedFiles = [];
+
+      for (const commit of targetCommits) {
+        const sha = commit.sha;
+        let files = branchData[sha]?.files || [];
+        if (!files.length && token) {
+          const r = await fetch(`${API}/github/repos/${repo.owner}/${repo.name}/commits/${sha}`, {
+            headers: { 'X-GitHub-Token': token }
+          });
+          if (r.ok) {
+            const d = await r.json();
+            files = d.files || [];
+            setBranchData(prev => ({ ...prev, [sha]: d }));
+          }
+        }
+
+        const sastRes = await fetch(`${API}/sast/analyze-commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sha,
+            message: commit.message,
+            author: commit.author,
+            date: commit.date,
+            branch: commit.branch_name,
+            files: files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
+            repo_url: `https://github.com/${repo.owner}/${repo.name}.git`
+          })
+        });
+        
+        if (sastRes.ok) {
+           const sastData = await sastRes.json();
+           if (sastData.scanner_results) {
+             if (Array.isArray(sastData.scanner_results)) {
+               combinedFindings.push(...sastData.scanner_results);
+             } else {
+               // Novo formato dicionário: anexa o objeto inteiro para a IA avaliar
+               combinedFindings.push(sastData.scanner_results);
+             }
+           }
+        }
+        
+        combinedFiles.push(...files.map(f => ({ filename: f.filename, patch: f.patch || '' })));
+      }
+
+      const apiKey = sessionStorage.getItem('gemini_api_key');
+      const headers = { 
+        'Content-Type': 'application/json',
+        'X-Gemini-Key': apiKey || ''
+      };
+
+      const mainCommit = targetCommits[0];
+
+      const aiRes = await fetch(`${API}/ai/validate-sast`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sha: mainCommit.sha,
+          message: type === 'all' ? 'Múltiplos commits analisados (Visão Executiva)' : mainCommit.message,
+          author: mainCommit.author,
+          date: mainCommit.date,
+          branch: mainCommit.branch_name,
+          files: combinedFiles,
+          scanner_results: combinedFindings,
+          executive_mode: true
+        })
+      });
+
+      if (!aiRes.ok) throw new Error("Erro na IA Executiva");
+      const aiData = await aiRes.json();
+
+      setChatMessages(prev => prev.map(m => m.id === loadingId ? {
+        role: 'assistant',
+        content: `**Resumo Executivo de Riscos**\n\n${aiData.analysis}`,
+        relatedSha: mainCommit.sha
+      } : m));
+
+      // Scroll para o fim
+      setTimeout(() => {
+        const chatContainer = document.getElementById('chat-messages-container');
+        if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+      }, 100);
+
+    } catch (e) {
+      setChatMessages(prev => prev.map(m => m.id === loadingId ? {
+        role: 'assistant',
+        content: `⚠️ Falha na Análise SAST Executiva: ${e.message}`
+      } : m));
+    }
+  };
+
+  const markAsFixed = (sha) => {
+    setFixedCommits(prev => ({ ...prev, [sha]: true }));
+  };
+
+
+  // ─── Extrator de Contexto: Gera JSON estruturado dos commits visíveis na tela ───
+  // Esquema: [{ hash, autor, data, mensagem, branch, tipo }]
+  // Reutilizável por outros agentes da plataforma que precisem do mesmo snapshot.
+  const extractCommitsToJSON = () => {
+    const commitCards = document.querySelectorAll('[data-commit="true"]');
+    const commitArray = [];
+    commitCards.forEach(card => {
+      commitArray.push({
+        hash:     card.getAttribute('data-sha')      || card.getAttribute('data-hash') || "",
+        autor:    card.getAttribute('data-author')   || "",
+        data:     card.getAttribute('data-date')     || "",
+        mensagem: card.getAttribute('data-message')  || "",
+        branch:   card.getAttribute('data-branch')   || "",
+        tipo:     card.getAttribute('data-type')     || (card.getAttribute('data-is-main') === 'true' ? 'main' : 'pr'),
+      });
+    });
+    return commitArray;
+  };
+
   const sendAIQuery = async (promptText) => {
     // Validação BYOK (Bring Your Own Key) via Sessão
     const geminiKey = sessionStorage.getItem('gemini_api_key');
@@ -195,16 +489,10 @@ export default function RiskGraphCanvas({ repo, onBack }) {
     // session_id é o identificador único da sessão de memória deste repositório
     const sessionId = `${repo.owner}_${repo.name}`.replace(/[^a-zA-Z0-9-_.]/g, '_');
 
-    // 1. DOM Scraping: Captura contexto da tela do Mapa Mental
-    const commitCards = document.querySelectorAll('[data-commit="true"]');
-    let screenContext = "";
-    commitCards.forEach(card => {
-      const author = card.getAttribute('data-author') || "";
-      const date = card.getAttribute('data-date') || "";
-      const msg = card.getAttribute('data-message') || "";
-      const branch = card.getAttribute('data-branch') || "";
-      screenContext += `[Commit na Tela] Branch: ${branch} | Autor: ${author} | Data: ${date} | Msg: ${msg}\n`;
-    });
+    // Extração de Contexto: monta JSON estruturado dos commits visíveis no Mapa Mental
+    const commitsJSON = extractCommitsToJSON();
+    const screenContext = JSON.stringify(commitsJSON, null, 2);
+    console.log(`[DEBUG IA] Commits extraídos para contexto: ${commitsJSON.length} cards encontrados.`);
 
     try {
       const res = await fetch(`${API}/ai/chat`, {
@@ -516,16 +804,58 @@ export default function RiskGraphCanvas({ repo, onBack }) {
               <div className="absolute top-0 left-14 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2 rounded-xl shadow-2xl flex flex-col gap-1 w-64 animate-in fade-in slide-in-from-left-2">
                 <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2 px-2 pt-1">Ações Rápidas</div>
                 
-                <button onClick={() => sendAIQuery("Resuma os riscos deste projeto.")} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
-                  <FileText className="w-4 h-4" /> Resumir Riscos
-                </button>
-                <button onClick={() => sendAIQuery("Analise a segurança dos commits mais recentes (SAST).")} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
-                  <Activity className="w-4 h-4" /> Analisar SAST
-                </button>
-                <div className="h-px bg-white/5 my-1" />
-                <button onClick={() => { setIsCopilotMenuOpen(false); setIsChatPanelOpen(true); }} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-slate-800 flex items-center gap-2 transition-colors">
-                  <MessageSquare className="w-4 h-4" /> Chat Livre
-                </button>
+                {executiveSASTStep === 0 && (
+                  <>
+                    <button onClick={() => sendAIQuery("Resuma os riscos deste projeto.")} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
+                      <FileText className="w-4 h-4" /> Resumir Riscos
+                    </button>
+                    <button onClick={() => setExecutiveSASTStep(1)} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-2 transition-colors">
+                      <Activity className="w-4 h-4" /> Análise SAST (Executiva)
+                    </button>
+                    <div className="h-px bg-white/5 my-1" />
+                    <button onClick={() => { setIsCopilotMenuOpen(false); setIsChatPanelOpen(true); }} className="text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                      <MessageSquare className="w-4 h-4" /> Chat Livre
+                    </button>
+                  </>
+                )}
+
+                {executiveSASTStep === 1 && (
+                  <div className="flex flex-col gap-2 p-1">
+                    <p className="text-xs text-gray-300 px-1 mb-1">Analisar quais commits?</p>
+                    <button onClick={() => quickExecutiveSAST('all', null)} className="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 text-indigo-300 text-xs py-1.5 rounded-lg transition-colors">
+                      Todos os Commits
+                    </button>
+                    <button onClick={() => setExecutiveSASTStep(2)} className="bg-slate-800 hover:bg-slate-700 border border-white/10 text-gray-300 text-xs py-1.5 rounded-lg transition-colors">
+                      Commit Específico
+                    </button>
+                    <button onClick={() => setExecutiveSASTStep(0)} className="text-[10px] text-gray-500 hover:text-gray-400 mt-1">
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+
+                {executiveSASTStep === 2 && (
+                  <div className="flex flex-col gap-2 p-1">
+                    <p className="text-xs text-gray-300 px-1 mb-1">Cole o Hash do Commit:</p>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: a1b2c3d..." 
+                      className="bg-[#0b111a] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-200 outline-none focus:border-indigo-500"
+                      value={executiveSASTHash}
+                      onChange={(e) => setExecutiveSASTHash(e.target.value)}
+                    />
+                    <button 
+                      onClick={() => quickExecutiveSAST('specific', executiveSASTHash)}
+                      disabled={!executiveSASTHash}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs py-1.5 rounded-lg transition-colors mt-1"
+                    >
+                      Iniciar Análise
+                    </button>
+                    <button onClick={() => setExecutiveSASTStep(0)} className="text-[10px] text-gray-500 hover:text-gray-400 mt-1">
+                      Cancelar
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -545,9 +875,18 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                 <Bot className="w-5 h-5 text-indigo-400" />
                 <span className="font-semibold text-sm text-indigo-100">Gemini Security Copilot</span>
               </div>
-              <button onClick={() => setIsChatPanelOpen(false)} className="text-gray-400 hover:text-white transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={clearChat}
+                  title="Limpar conversa"
+                  className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => setIsChatPanelOpen(false)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -556,6 +895,28 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div className={`max-w-[90%] p-3 text-[13px] leading-relaxed shadow-md ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 'bg-slate-800 text-gray-200 border border-slate-700 rounded-2xl rounded-tl-sm'}`}>
                     <pre className="whitespace-pre-wrap font-sans break-words">{msg.content}</pre>
+                    {msg.relatedSha && (
+                      <button
+                        onClick={() => {
+                          setIsChatPanelOpen(false);
+                          setIsCopilotMenuOpen(false);
+                          const el = document.getElementById(`commit-${msg.relatedSha}`);
+                          if (el) {
+                             el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                             const oldShadow = el.style.boxShadow;
+                             el.style.boxShadow = '0 0 30px rgba(99, 102, 241, 0.8)';
+                             el.style.borderColor = '#818cf8';
+                             setTimeout(() => {
+                               el.style.boxShadow = oldShadow;
+                               el.style.borderColor = '';
+                             }, 2500);
+                          }
+                        }}
+                        className="mt-3 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-md font-semibold text-xs flex items-center justify-center gap-2 w-full transition-colors border border-indigo-500 shadow-md"
+                      >
+                        📍 Ver no Mapa Mental de Commits
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -655,11 +1016,14 @@ export default function RiskGraphCanvas({ repo, onBack }) {
               <React.Fragment key={commit.sha}>
                 {/* Commit Card */}
                 <div
+                  id={`commit-${commit.sha}`}
                   data-commit="true"
+                  data-sha={commit.sha}
                   data-author={commit.author}
                   data-date={commit.date}
                   data-message={commit.message}
                   data-branch={commit.branch_name}
+                  data-is-main={String(isMain)}
                   className={`no-pan absolute flex flex-col resize overflow-hidden w-72 min-h-[200px] h-auto max-h-[500px] bg-slate-900/90 rounded-lg shadow-xl text-sm
                              ${isMain ? 'border border-slate-700 hover:shadow-purple-500/10' : 'border border-amber-500/40 hover:shadow-amber-500/10'}`}
                   style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)', zIndex: pos.zIndex }}
@@ -751,6 +1115,14 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                       <div className="flex items-center gap-2"><Code className="w-3.5 h-3.5 text-emerald-400" /><span>Código Patch</span></div>
                       {widgets.includes('details') && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                     </button>
+                    <div className="h-px bg-white/5 my-1" />
+                    <button
+                      className="flex items-center justify-between w-full text-left px-2 py-2 rounded-lg hover:bg-red-500/10 text-[13px] text-gray-300 hover:text-red-300 transition-colors"
+                      onClick={() => expandSASTAnalysis(commit)}
+                    >
+                      <div className="flex items-center gap-2"><ShieldAlert className="w-3.5 h-3.5 text-red-400" /><span>Análise (SAST)</span></div>
+                      {widgets.includes('sast') && <span className="w-1.5 h-1.5 rounded-full bg-red-400" />}
+                    </button>
                   </div>
                 )}
 
@@ -777,12 +1149,29 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                       }}
                       onWheel={(e) => e.stopPropagation()}
                     >
-                      {/* Cabeçalho de Arrasto */}
+                      {/* Cabeçalho de Arrasto (com botão fechar para SAST) */}
                       <div
-                        className="cursor-move bg-black/40 p-1.5 flex items-center justify-center border-b border-white/5 hover:bg-black/60 transition-colors shrink-0"
+                        className="cursor-move bg-black/40 p-1.5 flex items-center justify-between border-b border-white/5 hover:bg-black/60 transition-colors shrink-0"
                         onMouseDown={(e) => handleNodeDragStart(e, widgetId)}
                       >
                         <GripHorizontal className="w-4 h-4 text-gray-500" />
+                        {widget === 'sast' && (
+                          <button
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveWidgets(prev => ({
+                                ...prev,
+                                [commit.sha]: (prev[commit.sha] || []).filter(w => w !== 'sast')
+                              }));
+                              setSastResults(prev => { const n = {...prev}; delete n[commit.sha]; return n; });
+                            }}
+                            className="ml-auto p-0.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                            title="Fechar análise"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Corpo do Widget */}
@@ -807,6 +1196,141 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                             </div>
                           </div>
                         )}
+
+                        {widget === 'sast' && (() => {
+                          const sast = sastResults[commit.sha];
+                          const isFixed = fixedCommits[commit.sha];
+                          const isVulnerable = sast?.vulnerable && !isFixed;
+                          const isClean = sast?.vulnerable === false || isFixed;
+
+                          return (
+                            <div className={`flex-1 flex flex-col rounded-lg ${
+                              isVulnerable
+                                ? 'border border-red-500/50 bg-red-950/20'
+                                : isClean
+                                ? 'border border-emerald-500/40 bg-emerald-950/20'
+                                : 'border border-slate-700'
+                            }`}>
+                              {/* Header do Card SAST */}
+                              <div className={`flex items-center gap-2 mb-3 pb-2 border-b shrink-0 ${
+                                isVulnerable ? 'border-red-500/30' : isClean ? 'border-emerald-500/30' : 'border-white/5'
+                              }`}>
+                                {sast?.loading ? (
+                                  <><div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                                  <h4 className="text-sm font-semibold text-orange-200">Analisando...</h4></>
+                                ) : isVulnerable ? (
+                                  <><ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+                                  <h4 className="text-sm font-semibold text-red-200">Vuln. Detectada</h4>
+                                  <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">{sast?.severity}</span></>
+                                ) : isFixed ? (
+                                  <><ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                                  <h4 className="text-sm font-semibold text-emerald-200">Corrigido</h4>
+                                  <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">FIXED</span></>
+                                ) : isClean ? (
+                                  <><ShieldCheck className="w-4 h-4 text-sky-400 shrink-0" />
+                                  <h4 className="text-sm font-semibold text-sky-200">Código Seguro</h4>
+                                  <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30">CLEAN</span></>
+                                ) : (
+                                  <><Zap className="w-4 h-4 text-orange-400" />
+                                  <h4 className="text-sm font-semibold text-orange-100">Análise SAST</h4></>
+                                )}
+                              </div>
+
+                              {/* Badges de ferramentas */}
+                              {sast?.tools_used?.length > 0 && (
+                                <div className="flex gap-1 mb-2 flex-wrap shrink-0">
+                                  {sast.tools_used.map(t => (
+                                    <span key={t} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-white/10 text-gray-400">{t}</span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Corpo: Dados técnicos ou IA */}
+                              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                {sast?.loading ? (
+                                  <div className="text-xs text-gray-500 animate-pulse flex flex-col gap-2">
+                                    <span>Executando Scanners (Semgrep/Trivy)...</span>
+                                    <div className="flex gap-1">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                  </div>
+                                ) : sast?.aiLoading ? (
+                                  <div className="text-xs text-purple-400 animate-pulse flex flex-col gap-2 p-2 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                                    <div className="flex items-center gap-2">
+                                      <Bot className="w-4 h-4 animate-spin-slow" />
+                                      <span>IA Auditando o código...</span>
+                                    </div>
+                                  </div>
+                                ) : sast?.analysis ? (
+                                  isClean && !isFixed ? (
+                                    <div className="flex flex-col h-full">
+                                      <div className="flex items-center gap-1.5 mb-2 text-[10px] text-sky-400 font-semibold uppercase tracking-wider shrink-0">
+                                        <ShieldCheck className="w-3 h-3" /> Prova Técnica de Segurança
+                                      </div>
+                                      <div className="text-[11px] text-sky-100/80 leading-relaxed whitespace-pre-wrap break-words text-justify max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                        {sast.analysis}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words text-justify max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                      {sast.analysis}
+                                    </div>
+                                  )
+                                ) : (
+                                  <div className="space-y-3">
+                                    <div className="text-[11px] text-gray-400">
+                                      {sast?.scanner_results && (Array.isArray(sast.scanner_results) ? sast.scanner_results.length > 0 : Object.keys(sast.scanner_results).length > 0) ? (
+                                        <div className="space-y-2">
+                                          <p className="font-semibold text-gray-300">Achados dos Scanners:</p>
+                                          <ul className="list-disc pl-4 space-y-1">
+                                            {Array.isArray(sast.scanner_results) 
+                                              ? sast.scanner_results.map((r, i) => (
+                                                  <li key={i}><span className="text-gray-300">[{r.tool}]</span> {r.file}: {r.rule}</li>
+                                                ))
+                                              : Object.entries(sast.scanner_results).map(([tool, data]) => (
+                                                  <li key={tool}><span className="text-gray-300 capitalize">[{tool}]</span> Scan efetuado (Detalhes completos disponíveis no backend/console)</li>
+                                                ))
+                                            }
+                                          </ul>
+                                        </div>
+                                      ) : (
+                                        <p>Nenhuma vulnerabilidade detectada pelos scanners estruturais.</p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <button
+                                        onClick={() => showFullScannerResults(sast.scanner_results)}
+                                        className="w-full flex items-center justify-center gap-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/50 text-gray-300 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300"
+                                      >
+                                        📄 Ver Análise Completa
+                                      </button>
+                                      <button
+                                        onClick={() => requestAIValidation(commit)}
+                                        className="w-full flex items-center justify-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300"
+                                      >
+                                        <Bot className="w-3.5 h-3.5" />
+                                        Validação por IA
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Botão Marcar como Corrigido (apenas se vulnerável) */}
+                              {isVulnerable && (
+                                <button
+                                  onClick={() => markAsFixed(commit.sha)}
+                                  className="mt-3 w-full flex items-center justify-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 shrink-0"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                  ✅ Marcar como Corrigido
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {widget === 'ia' && (
                           <div className="flex-1 flex flex-col border-purple-500/20">
@@ -941,6 +1465,61 @@ export default function RiskGraphCanvas({ repo, onBack }) {
           </div>
         </div>
       )}
+
+      {/* Raw Scanner Data Modal */}
+      {fullSastData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#0b111a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[90vh]">
+            {/* Header */}
+            <div className="h-14 border-b border-white/10 bg-[#060b13] flex items-center justify-between px-6 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                  <Code className="w-5 h-5 text-emerald-400" />
+                </div>
+                <h3 className="font-semibold text-white">Análise Completa (Raw Data)</h3>
+              </div>
+              <button
+                onClick={() => setFullSastData(null)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+              {Object.entries(fullSastData).map(([tool, data]) => {
+                const isEmpty = !data || (Array.isArray(data) && data.length === 0) || (typeof data === 'object' && Object.keys(data).length === 0);
+                
+                return (
+                  <div key={tool} className={`border rounded-lg overflow-hidden ${isEmpty ? 'border-white/5 bg-white/5' : 'border-red-500/30 bg-red-950/10'}`}>
+                    <div className={`px-4 py-2 border-b flex items-center justify-between ${isEmpty ? 'border-white/5' : 'border-red-500/30'}`}>
+                      <h4 className={`font-mono text-sm capitalize font-bold ${isEmpty ? 'text-gray-400' : 'text-red-400'}`}>
+                        {tool}
+                      </h4>
+                      {isEmpty ? (
+                        <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full">CLEAN</span>
+                      ) : (
+                        <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold">ACHADOS ENCONTRADOS</span>
+                      )}
+                    </div>
+                    {!isEmpty && (
+                      <div className="p-4 bg-[#040810]">
+                        <pre className="text-xs font-mono leading-relaxed overflow-x-auto custom-scrollbar">
+                          <code className="text-emerald-400">
+                            {JSON.stringify(data, null, 2)}
+                          </code>
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
     </section>
   );
 }

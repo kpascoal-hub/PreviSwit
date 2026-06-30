@@ -32,7 +32,12 @@ _SYSTEM_INSTRUCTION = (
     "Responda sempre em português brasileiro. "
     "Seja técnico, preciso e direto ao ponto. "
     "Quando analisar código ou commits, foque em vulnerabilidades reais, "
-    "problemas de qualidade e boas práticas de segurança."
+    "problemas de qualidade e boas práticas de segurança. "
+    "REGRA ABSOLUTA: Você NÃO é um scanner de código. NUNCA deduza ou invente "
+    "falhas de segurança baseando-se apenas em títulos de commits ou mensagens de texto. "
+    "Se o usuário perguntar sobre vulnerabilidades gerais, e você não tiver um JSON com "
+    "resultados de ferramentas SAST (Semgrep/Trivy) no contexto, afirme categoricamente "
+    "que precisa que ele execute a Análise SAST real nas Ações Rápidas primeiro."
 )
 
 
@@ -154,18 +159,42 @@ class MapaMentalAgent:
         for msg in history:
             contents.append(msg)
             
+        # Roteamento de Intenção (Intent Routing) para economia de tokens
+        keywords = ["commit", "sast", "analise", "vulnerabilidade", "falha", "risco", "resumo", "mapa", "cve", "análise"]
+        prompt_lower = prompt.lower()
+        needs_context = True
+        if len(prompt) < 10 or not any(kw in prompt_lower for kw in keywords):
+            needs_context = False
+
         final_prompt = prompt
-        if context.strip():
+        current_system_instruction = _SYSTEM_INSTRUCTION
+
+        if needs_context and context.strip():
+            # Cache Efêmero: salva o contexto JSON na pasta do agente
+            cache_file = os.path.join(os.path.dirname(__file__), "commits_context.json")
+            try:
+                with open(cache_file, 'w', encoding='utf-8') as f:
+                    f.write(context)
+                logger.info(f"[Cache Efêmero] commits_context.json atualizado para session '{session_id}'.")
+            except Exception as cache_err:
+                logger.warning(f"[Cache Efêmero] Falha ao salvar cache: {cache_err}")
+
             final_prompt = (
-                "REGRA ABSOLUTA: Você é o AI Security Copilot integrado à tela de Mapa Mental de Commits. "
+                "REGRA ABSOLUTA: O histórico da árvore de commits do repositório atual foi atualizado "
+                "e está estruturado em formato JSON abaixo. Você DEVE assimilar as informações detalhadas "
+                "deste JSON (autor, hash, datas, mensagens) para responder à pergunta do usuário. "
                 "Você DEVE basear sua resposta EXCLUSIVAMENTE nos dados fornecidos no [CONTEXTO VISUAL DA TELA] abaixo. "
                 "NUNCA sugira ao usuário acessar o GitHub, repositórios externos ou usar outras ferramentas. "
-                "Se a resposta para a pergunta não estiver no contexto abaixo, diga apenas que as informações não estão visíveis no mapa atual.\n\n"
-                f"[CONTEXTO VISUAL DA TELA]\n{context}\n\n"
+                "Se a resposta para a pergunta não estiver no contexto abaixo, diga apenas que as informações "
+                "não estão visíveis no mapa atual.\n\n"
+                f"[CONTEXTO VISUAL DA TELA — JSON DE COMMITS]\n{context}\n\n"
                 f"Pergunta do usuário: {prompt}"
             )
-            
+        elif not needs_context:
+            current_system_instruction = "Você é o PreviSwit AI, um assistente de cibersegurança. Responda de forma curta, educada e conversacional. Não há dados de repositório no momento."
+
         contents.append({"role": "user", "parts": [{"text": final_prompt}]})
+
 
         client = genai.Client(api_key=api_key)
         
@@ -177,7 +206,7 @@ class MapaMentalAgent:
                     model=self._model,
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        system_instruction=_SYSTEM_INSTRUCTION,
+                        system_instruction=current_system_instruction,
                         temperature=0.4,
                         max_output_tokens=2048,
                     ),

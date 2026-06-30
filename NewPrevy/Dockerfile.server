@@ -19,10 +19,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Instala dependências mínimas do sistema
+# Instala dependências mínimas do sistema, Git e Trivy
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
+        wget \
+        git \
     && rm -rf /var/lib/apt/lists/*
+
+# Instala Trivy (última versão via script oficial)
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+    | sh -s -- -b /usr/local/bin
+
+# Instala Gitleaks
+RUN GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && wget -qO /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
+    && rm /tmp/gitleaks.tar.gz \
+    && chmod +x /usr/local/bin/gitleaks
+
+# Instala pipx para ferramentas em Python
+RUN apt-get update && apt-get install -y pipx && rm -rf /var/lib/apt/lists/*
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Instala Semgrep e Checkov via pipx
+RUN pipx install semgrep && pipx install checkov
 
 # ── Dependências Python ──────────────────────────────────────────────────────
 # Copia apenas o requirements primeiro para cache de layer
