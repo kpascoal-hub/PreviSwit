@@ -528,6 +528,29 @@ def download_report_pdf(report_id: str, severity_filter: str = "ALL"):
     )
 
 
+@router.get("/{report_id}/json", summary="Baixar JSON de relatorio persistido")
+def download_report_json(report_id: str):
+    """
+    Recupera o scan_data de um laudo e retorna como JSON response para download.
+    """
+    reports = _load_meta()
+    report  = next((r for r in reports if r["id"] == report_id), None)
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado.")
+
+    scan_data = _load_scan_data(report_id)
+    if scan_data is None:
+        scan_data = report
+
+    content = json.dumps(scan_data, indent=2, ensure_ascii=False)
+    filename = f"previswit_report_{report_id[:8]}.json"
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8")),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ─── Rotas auxiliares ─────────────────────────────────────────────────────────
 
 @router.post("/generate", summary="[Legado] Registrar relatorio agendado")

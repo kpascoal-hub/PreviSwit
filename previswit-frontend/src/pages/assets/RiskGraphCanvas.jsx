@@ -243,6 +243,11 @@ export default function RiskGraphCanvas({ repo, onBack }) {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      
+      // Injeta os dados recebidos diretamente no objeto em memória
+      commit.scanner_results = data.scanner_results;
+      setCommits(prev => prev.map(c => c.sha === sha ? { ...c, scanner_results: data.scanner_results } : c));
+
       // Salva resultados técnicos e garante que `analysis` está nulo inicialmente
       setSastResults(prev => ({ ...prev, [sha]: { ...data, loading: false, analysis: null } }));
     } catch (e) {
@@ -1087,7 +1092,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                   className={`no-pan absolute flex flex-col resize overflow-hidden w-72 min-h-[200px] h-auto max-h-[500px] bg-slate-900/90 rounded-lg shadow-xl text-sm
                              ${isMain ? 'border border-slate-700 hover:shadow-purple-500/10' : 'border border-amber-500/40 hover:shadow-amber-500/10'}`}
                   style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)', zIndex: pos.zIndex }}
-                  onMouseDown={() => {
+                  onMouseDown={(e) => {
                     maxZIndex.current += 1;
                     setNodePositions(p => ({ ...p, [commit.sha]: { ...p[commit.sha], zIndex: maxZIndex.current } }));
                   }}
@@ -1114,6 +1119,38 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                         <p className={`text-[10px] mt-1 font-mono ${isMain ? 'text-purple-400' : 'text-amber-400'}`}>
                           {commit.branch_name} • {commit.sha.substring(0, 7)}
                         </p>
+                        
+                        {/* Status Badges */}
+                        {(() => {
+                          const scanInfo = sastResults[commit.sha];
+                          const hasScannerResults = commit.scanner_results && Object.keys(commit.scanner_results).length > 0;
+                          
+                          const isPendingScan = !scanInfo && !hasScannerResults;
+                          const isScanning = scanInfo && scanInfo.loading;
+                          const isScanComplete = (scanInfo && !scanInfo.loading) || hasScannerResults;
+                          const isVuln = scanInfo ? scanInfo.vulnerable : false;
+                          
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {isPendingScan && (
+                                <span className="badge-pendente bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide">
+                                  ⏳ Pendente de Scan
+                                </span>
+                              )}
+                              {isScanning && (
+                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                  Analisando...
+                                </span>
+                              )}
+                              {isScanComplete && (
+                                <span className={`badge-completo border rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${isVuln ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                  {isVuln ? `⚠️ Risco: ${scanInfo?.severity || 'HIGH'}` : '🛡️ Scan Completo'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 

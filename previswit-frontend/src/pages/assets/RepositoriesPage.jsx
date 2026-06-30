@@ -18,7 +18,8 @@ import { NavLink } from 'react-router-dom';
 import {
   GitBranch, ArrowLeft, Link2, RefreshCw,
   Folder, AlertTriangle, ExternalLink,
-  Lock, Unlock, GitFork, Star, Clock, Settings
+  Lock, Unlock, GitFork, Star, Clock, Settings,
+  FileText, ChevronDown, CheckCircle
 } from 'lucide-react';
 import RiskGraphCanvas from './RiskGraphCanvas';
 
@@ -59,6 +60,141 @@ function CriticalityBadge({ value }) {
 function RepositoryCard({ repo, openRiskGraph }) {
   // Slug único baseado no nome (GitHub não retorna IDs numéricos no mapeamento limpo)
   const slug = repo.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') ?? 'repo';
+  const repoUrl = `https://github.com/${repo.name}.git`;
+
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [intervalValue, setIntervalValue] = useState("30");
+  const [intervalUnit, setIntervalUnit] = useState("MINUTES"); // "MINUTES" | "HOURS" | "DAYS"
+  const [runOnce, setRunOnce] = useState(true);
+  const [selectedAiLevel, setSelectedAiLevel] = useState("EXECUTIVO");
+  const [scanStatus, setScanStatus] = useState(null); // 'PENDING' | 'RUNNING' | 'CONCLUÍDO' | 'ERROR'
+  const [scanId, setScanId] = useState(null);
+  const [scanData, setScanData] = useState(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Hook Polling: Verifica o status do scan no backend
+  useEffect(() => {
+    let interval;
+    if (scanId && (scanStatus === 'PENDING' || scanStatus === 'RUNNING')) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API}/sast/scan-status/${scanId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setScanStatus(data.status);
+            if (data.status === 'CONCLUÍDO') {
+              setScanData(data.data);
+              clearInterval(interval);
+            } else if (data.status === 'ERROR') {
+              clearInterval(interval);
+            }
+          }
+        } catch (e) {
+          console.error("Erro no polling do scan:", e);
+        }
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [scanId, scanStatus]);
+
+  const handleStartScan = async () => {
+    setShowScheduleModal(false);
+    setScanStatus('PENDING');
+    
+    // Cálculo do tempo sob demanda em minutos
+    let intervalMinutes = 0;
+    if (!runOnce) {
+      const val = parseInt(intervalValue, 10) || 0;
+      if (intervalUnit === "MINUTES") {
+        intervalMinutes = val;
+      } else if (intervalUnit === "HOURS") {
+        intervalMinutes = val * 60;
+      } else if (intervalUnit === "DAYS") {
+        intervalMinutes = val * 60 * 24;
+      }
+    }
+
+    try {
+      const geminiKey = sessionStorage.getItem('X-Gemini-Key') || '';
+      const res = await fetch(`${API}/sast/schedule`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': geminiKey
+        },
+        body: JSON.stringify({
+          repo_url: repoUrl,
+          target_name: repo.name,
+          interval_minutes: intervalMinutes,
+          ai_summary_level: selectedAiLevel
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScanId(data.scan_id);
+        showToast("Orquestração Iniciada");
+      } else {
+        setScanStatus('ERROR');
+        showToast("Erro ao iniciar orquestração");
+      }
+    } catch (e) {
+      setScanStatus('ERROR');
+      showToast("Erro ao iniciar orquestração");
+    }
+  };
+
+  const handleGenerateComplianceReport = async () => {
+    if (!scanData) return;
+    setIsGeneratingPdf(true);
+    try {
+      const res = await fetch(`${API}/reports/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Conformidade ${selectedAiLevel} — ${repo.name}`,
+          target: `repo:${repo.name}`,
+          target_label: repo.name,
+          type: 'Scan de Repositório',
+          standard: selectedAiLevel === 'CONFORMIDADE' ? 'ISO 27001 / SOC2' : 'OWASP Top 10',
+          risk: scanData.vulnerable ? 'HIGH' : 'CLEAN',
+          compliance_model: selectedAiLevel,
+          scan_data: scanData.scanner_results
+        })
+      });
+      
+      if (!res.ok) throw new Error("Erro ao salvar o relatório");
+      const saved = await res.json();
+      
+      if (window.previswit?.reports?.receive) {
+        window.previswit.reports.receive(saved.report);
+      }
+      showToast("Relatório salvo com sucesso! Acesse a aba de Relatórios para exportar as evidências.");
+    } catch (e) {
+      showToast(`Falha ao salvar relatório: ${e.message}`);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleOpenDeepDive = (e) => {
+    openRiskGraph(repo);
+  };
+
+  // Determina as cores e texto do badge de status
+  let badgeProps = { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', label: '⏳ Pendente de Scan', icon: '' };
+  if (scanStatus === 'PENDING' || scanStatus === 'RUNNING') {
+    badgeProps = { bg: 'bg-blue-500/10', border: 'border-blue-500/25', text: 'text-blue-400', label: 'Analisando...', icon: '🔄 ' };
+  } else if (scanStatus === 'CONCLUÍDO' || scanData) {
+    badgeProps = { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', label: '🛡️ Scan Completo', icon: '' };
+  } else if (scanStatus === 'ERROR') {
+    badgeProps = { bg: 'bg-red-500/10', border: 'border-red-500/25', text: 'text-red-400', label: 'Erro no Scan', icon: '⚠️ ' };
+  }
 
   return (
     <div
@@ -81,10 +217,8 @@ function RepositoryCard({ repo, openRiskGraph }) {
             </p>
           </div>
         </div>
-        {/* Badge de status SAST — ainda sem scan executado */}
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border
-                         bg-green-500/10 text-green-400 border-green-500/25 whitespace-nowrap">
-          🟢 Código Limpo
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeProps.bg} ${badgeProps.text} ${badgeProps.border} whitespace-nowrap flex items-center gap-1`}>
+          {badgeProps.icon}{badgeProps.label}
         </span>
       </div>
 
@@ -102,20 +236,154 @@ function RepositoryCard({ repo, openRiskGraph }) {
         </span>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2">
+      {/* Primary Actions */}
+      <div className="flex gap-2 relative">
         <button
           id={`btn-scan-repo-${slug}`}
+          onClick={() => setShowScheduleModal(true)}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
                      rounded-lg border border-purple-500/25 text-purple-400
                      hover:bg-purple-500/10 hover:border-purple-500/50 transition-all duration-150"
-          title="Executar scan SAST neste repositório"
         >
           <Star className="w-3 h-3" />
           Scan SAST
         </button>
+
+        {showScheduleModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md">
+            <div className="w-full max-w-lg bg-[#060b13] border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+              
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                  <Star className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Configuração de Orquestração SAST</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Alvo: {repo.name}</p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {/* Campo 1: Tempo Sob Demanda */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-gray-400">
+                      Frequência de Varredura
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={runOnce}
+                        onChange={(e) => setRunOnce(e.target.checked)}
+                        className="rounded border-white/10 bg-[#111827] text-purple-600 focus:ring-purple-500/50"
+                      />
+                      Rodar apenas uma vez agora
+                    </label>
+                  </div>
+                  
+                  {!runOnce && (
+                    <div className="flex gap-2 animate-in fade-in-50 duration-150">
+                      <div className="flex-1">
+                        <input
+                          type="number"
+                          placeholder="Ex: 30"
+                          value={intervalValue}
+                          onChange={(e) => setIntervalValue(e.target.value)}
+                          className="w-full bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
+                        />
+                      </div>
+                      <div className="relative w-1/3">
+                        <select
+                          value={intervalUnit}
+                          onChange={(e) => setIntervalUnit(e.target.value)}
+                          className="w-full appearance-none bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
+                        >
+                          <option value="MINUTES">Minutos</option>
+                          <option value="HOURS">Horas</option>
+                          <option value="DAYS">Dias</option>
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Campo 2: Foco da IA (Radio Cards) */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-semibold text-gray-400">
+                    Foco da Inteligência Artificial
+                  </label>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {/* Card 1: Executivo */}
+                    <div
+                      onClick={() => setSelectedAiLevel("EXECUTIVO")}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                  ${selectedAiLevel === "EXECUTIVO"
+                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                    >
+                      <span className="text-sm shrink-0">📊</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold">Visão Executiva</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em riscos de negócio, conformidade regulatória e impactos estratégicos gerais.</p>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Técnico */}
+                    <div
+                      onClick={() => setSelectedAiLevel("TECNICO")}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                  ${selectedAiLevel === "TECNICO"
+                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                    >
+                      <span className="text-sm shrink-0">⚙️</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold">Visão Técnica</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em vulnerabilidades do código, referências de CWEs/OWASP e instruções diretas de refatoração.</p>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Conformidade */}
+                    <div
+                      onClick={() => setSelectedAiLevel("CONFORMIDADE")}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                  ${selectedAiLevel === "CONFORMIDADE"
+                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                    >
+                      <span className="text-sm shrink-0">🛡️</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold">Visão de Conformidade</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Mapeia achados de segurança diretamente com os controles de frameworks como ISO 27001 e SOC2.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setShowScheduleModal(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-white/10 text-gray-400 text-xs font-medium hover:bg-white/5 hover:text-white transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleStartScan}
+                  className="flex-[1.5] py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5"
+                >
+                  🚀 Iniciar Orquestração
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={() => openRiskGraph(repo)}
+          onClick={handleOpenDeepDive}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
                      rounded-lg border border-teal-500/25 text-teal-400
                      hover:bg-teal-500/10 hover:border-teal-500/50 transition-all duration-150"
@@ -125,6 +393,30 @@ function RepositoryCard({ repo, openRiskGraph }) {
           Deep Dive
         </button>
       </div>
+
+      {/* Compliance Action */}
+      <div className="mt-1">
+        <button
+          onClick={handleGenerateComplianceReport}
+          disabled={scanStatus !== 'CONCLUÍDO' || isGeneratingPdf}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
+                     rounded-lg border border-white/10 bg-white/5 text-gray-400
+                     hover:bg-white/10 hover:text-white transition-all duration-150
+                     disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Gera um PDF Executivo do scan concluído"
+        >
+          {isGeneratingPdf ? <RefreshCw className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+          📄 Gerar Relatório de Conformidade
+        </button>
+      </div>
+
+      {/* Local Toast Cyber Dark */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[500] flex items-center gap-2 px-4 py-3 rounded-lg shadow-2xl border border-purple-500/30 bg-[#0d1421]/95 backdrop-blur-md text-xs font-medium text-purple-200 animate-in slide-in-from-bottom-2">
+          <CheckCircle className="w-4 h-4 text-purple-400 shrink-0" />
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

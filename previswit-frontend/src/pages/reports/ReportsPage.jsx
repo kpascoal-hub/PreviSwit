@@ -10,7 +10,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FileText, ShieldAlert, ShieldCheck, AlertTriangle,
   Download, RefreshCw, PlusCircle, ChevronDown,
-  Filter, Search, X, Clock, Target, Tag, TrendingUp,
+  Filter, Search, X, Clock, Target, Tag, TrendingUp, Trash2,
 } from 'lucide-react';
 
 const API = '/api/v1';
@@ -48,15 +48,7 @@ function formatDate(iso) {
   }
 }
 
-function downloadJSON(report) {
-  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `laudo_${report.id}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
@@ -97,6 +89,16 @@ export default function ReportsPage() {
   //   API pública: window.previswit.reports.receive(reportData)
   //   Outras abas (ex: RiskGraphCanvas após scan SAST) chamam esta função.
   const receiveNewReportEvent = useCallback(async (reportData) => {
+    // Se o laudo já foi persistido no backend (possui ID e data de conclusão), apenas atualiza o estado
+    if (reportData && reportData.id && reportData.completed_at) {
+      setReports(prev => {
+        const filtered = prev.filter(r => r.id !== reportData.id);
+        return [reportData, ...filtered];
+      });
+      showToast('success', `Novo laudo registrado: ${reportData.title}`);
+      return;
+    }
+
     try {
       const res = await fetch(`${API}/reports/`, {
         method:  'POST',
@@ -115,6 +117,38 @@ export default function ReportsPage() {
       showToast('error', `Erro ao salvar relatório: ${err.message}`);
     }
   }, [showToast]);
+
+  const handleDownloadPDF = async (reportId) => {
+    try {
+      const res = await fetch(`${API}/reports/${reportId}/pdf`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laudo_${reportId.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast('error', `Falha ao baixar PDF: ${err.message}`);
+    }
+  };
+
+  const handleDownloadJSON = async (reportId) => {
+    try {
+      const res = await fetch(`${API}/reports/${reportId}/json`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laudo_${reportId.slice(0, 8)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast('error', `Falha ao baixar JSON: ${err.message}`);
+    }
+  };
 
   // Expõe a API pública para outras abas via window
   useEffect(() => {
@@ -146,6 +180,18 @@ export default function ReportsPage() {
       setGenerating(false);
     }
   };
+
+  // ─── Excluir laudo ─────────────────────────────────────────────────────────
+  const handleDelete = useCallback(async (reportId, reportTitle) => {
+    try {
+      const res = await fetch(`${API}/reports/${reportId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      showToast('success', `Laudo excluído: ${reportTitle}`);
+    } catch (err) {
+      showToast('error', `Falha ao excluir laudo: ${err.message}`);
+    }
+  }, [showToast]);
 
   // ─── Filtragem ────────────────────────────────────────────────────────────
   const visibleReports = reports.filter(r => {
@@ -344,13 +390,29 @@ export default function ReportsPage() {
 
                 {/* Ação */}
                 <div className="flex items-center gap-2">
+                  <div className="flex rounded-lg overflow-hidden border border-indigo-500/20 bg-indigo-600/5">
+                    <button
+                      onClick={() => handleDownloadPDF(report.id)}
+                      title="Baixar laudo em PDF"
+                      className="flex items-center gap-1 px-2.5 py-1.5 hover:bg-indigo-600/25 border-r border-indigo-500/20 text-indigo-400 hover:text-indigo-200 text-[10px] font-bold transition-all"
+                    >
+                      📄 PDF
+                    </button>
+                    <button
+                      onClick={() => handleDownloadJSON(report.id)}
+                      title="Baixar laudo em JSON"
+                      className="flex items-center gap-1 px-2.5 py-1.5 hover:bg-indigo-600/25 text-indigo-400 hover:text-indigo-200 text-[10px] font-bold transition-all"
+                    >
+                      📦 JSON
+                    </button>
+                  </div>
                   <button
-                    onClick={() => downloadJSON(report)}
-                    title="Baixar laudo em JSON"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/30 border border-indigo-500/20 hover:border-indigo-500/50 text-indigo-400 hover:text-indigo-200 text-[11px] font-semibold transition-all"
+                    onClick={() => handleDelete(report.id, report.title)}
+                    title="Excluir laudo permanentemente"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/30 border border-red-500/20 hover:border-red-500/50 text-red-400 hover:text-red-200 text-[11px] font-semibold transition-all"
                   >
-                    <Download className="w-3 h-3" />
-                    JSON
+                    <Trash2 className="w-3 h-3" />
+                    Excluir
                   </button>
                 </div>
               </div>
