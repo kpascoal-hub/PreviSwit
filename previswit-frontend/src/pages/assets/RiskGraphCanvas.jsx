@@ -44,6 +44,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   const [sastResults, setSastResults] = useState({});     // { [sha]: { vulnerable, severity, analysis, tools_used, loading } }
   const [fixedCommits, setFixedCommits] = useState({});   // { [sha]: true } — commits marcados como corrigidos
   const [fullSastData, setFullSastData] = useState(null); // Dados brutos do Quarteto para exibição técnica
+  const [aiSummaries, setAiSummaries] = useState({});     // { [sha]: { loading, text } }
 
   // Node Drag & Drop State
   const [nodePositions, setNodePositions] = useState({});
@@ -258,6 +259,65 @@ export default function RiskGraphCanvas({ repo, onBack }) {
 
   const showFullScannerResults = (scannerData) => {
     setFullSastData(scannerData);
+  };
+
+  const generateCommitSummary = async (commit) => {
+    const sha = commit.sha;
+    setOpenMenuSha(null);
+    
+    setActiveWidgets(prev => {
+      const current = prev[sha] || [];
+      if (!current.includes('ia')) return { ...prev, [sha]: [...current, 'ia'] };
+      return prev;
+    });
+
+    if (aiSummaries[sha]?.text) return; // already generated
+    
+    setAiSummaries(prev => ({ ...prev, [sha]: { loading: true, text: null } }));
+    
+    const apiKey = sessionStorage.getItem('gemini_api_key');
+    if (!apiKey) {
+      alert("⚠️ Configuração Pendente: Insira sua GEMINI_API_KEY na aba de Integrações.");
+      setAiSummaries(prev => ({ ...prev, [sha]: { loading: false, text: "Chave de API não configurada." } }));
+      return;
+    }
+
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+    try {
+      let files = branchData[sha]?.files || [];
+      if (!files.length && token) {
+        const r = await fetch(`${API}/github/repos/${repo.owner}/${repo.name}/commits/${sha}`, {
+          headers: { 'X-GitHub-Token': token }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setBranchData(prev => ({ ...prev, [sha]: d }));
+          files = d.files || [];
+        }
+      }
+
+      const res = await fetch(`${API}/ai/summarize-commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': apiKey
+        },
+        body: JSON.stringify({
+          sha,
+          message: commit.message,
+          author: commit.author,
+          date: commit.date,
+          files: files.map(f => ({ filename: f.filename, patch: f.patch || '' }))
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      
+      setAiSummaries(prev => ({ ...prev, [sha]: { loading: false, text: data.summary } }));
+    } catch (err) {
+      setAiSummaries(prev => ({ ...prev, [sha]: { loading: false, text: `⚠️ Falha ao gerar resumo: ${err.message}` } }));
+    }
   };
 
   const requestAIValidation = async (commit) => {
@@ -1107,7 +1167,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                       <div className="flex items-center gap-2"><FileCode className="w-3.5 h-3.5 text-sky-400" /><span>Arquivos</span></div>
                       {widgets.includes('files') && <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />}
                     </button>
-                    <button className="flex items-center justify-between w-full text-left px-2 py-2 rounded-lg hover:bg-white/5 text-[13px] text-gray-300 hover:text-white transition-colors" onClick={() => toggleWidget(commit.sha, 'ia')}>
+                    <button className="flex items-center justify-between w-full text-left px-2 py-2 rounded-lg hover:bg-white/5 text-[13px] text-gray-300 hover:text-white transition-colors" onClick={() => generateCommitSummary(commit)}>
                       <div className="flex items-center gap-2"><BrainCircuit className="w-3.5 h-3.5 text-purple-400" /><span>Resumo IA</span></div>
                       {widgets.includes('ia') && <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />}
                     </button>
@@ -1155,7 +1215,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                         onMouseDown={(e) => handleNodeDragStart(e, widgetId)}
                       >
                         <GripHorizontal className="w-4 h-4 text-gray-500" />
-                        {widget === 'sast' && (
+                        {widget === 'sast' ? (
                           <button
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
@@ -1171,7 +1231,22 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                           >
                             <X className="w-3 h-3" />
                           </button>
-                        )}
+                        ) : widget === 'ia' ? (
+                          <button
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveWidgets(prev => ({
+                                ...prev,
+                                [commit.sha]: (prev[commit.sha] || []).filter(w => w !== 'ia')
+                              }));
+                            }}
+                            className="ml-auto p-0.5 text-gray-600 hover:text-purple-400 hover:bg-purple-500/10 rounded transition-colors"
+                            title="Fechar Resumo IA"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        ) : null}
                       </div>
 
                       {/* Corpo do Widget */}
@@ -1332,17 +1407,31 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                           );
                         })()}
 
-                        {widget === 'ia' && (
+                        {widget === 'ia' && (() => {
+                          const summaryState = aiSummaries[commit.sha] || {};
+                          return (
                           <div className="flex-1 flex flex-col border-purple-500/20">
                             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/5 shrink-0">
                               <BrainCircuit className="w-4 h-4 text-purple-400" />
                               <h4 className="text-sm font-semibold text-purple-100">Análise IA</h4>
                             </div>
-                            <div className="flex-1 overflow-y-auto text-xs text-gray-400 custom-scrollbar whitespace-pre-wrap leading-relaxed flex items-center justify-center text-center">
-                              Integração LLM pendente. Em breve, IA resumirá o impacto.
+                            <div className="flex-1 overflow-y-auto text-xs text-gray-400 custom-scrollbar whitespace-pre-wrap leading-relaxed flex items-center justify-center text-center p-2">
+                              {summaryState.loading ? (
+                                <div className="flex flex-col items-center gap-2 text-purple-400 animate-pulse">
+                                  <Bot className="w-6 h-6 animate-spin-slow" />
+                                  <span>A IA está resumindo...</span>
+                                </div>
+                              ) : summaryState.text ? (
+                                <div className="text-left w-full h-full text-[11px] text-gray-300">
+                                  {summaryState.text}
+                                </div>
+                              ) : (
+                                "Resumo não disponível."
+                              )}
                             </div>
                           </div>
-                        )}
+                          );
+                        })()}
 
                         {widget === 'details' && (
                           <div className="flex-1 flex flex-col border-emerald-500/20 max-h-full">

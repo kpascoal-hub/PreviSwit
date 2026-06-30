@@ -287,3 +287,75 @@ async def validate_sast_endpoint(body: SASTValidationRequest, x_gemini_key: str 
         "vulnerable": vulnerable,
         "sha": body.sha
     }
+
+
+class CommitSummaryRequest(BaseModel):
+    sha: str
+    message: Optional[str] = ""
+    author: Optional[str] = ""
+    date: Optional[str] = ""
+    files: Optional[list] = []
+
+@router.post("/summarize-commit", summary="Resumo Executivo e Técnico do Commit")
+async def summarize_commit_endpoint(body: CommitSummaryRequest, x_gemini_key: str = Header(..., alias="X-Gemini-Key")):
+    import logging
+    import asyncio
+    import json
+    
+    logger = logging.getLogger("previswit.ai_chat")
+    
+    if not x_gemini_key:
+        raise HTTPException(status_code=401, detail="Header 'X-Gemini-Key' é obrigatório.")
+        
+    try:
+        from google import genai as _genai
+        from google.genai import types as _types
+        
+        diff_summary = ""
+        for f in (body.files or [])[:5]:
+            if isinstance(f, dict):
+                diff_summary += f"\n### {f.get('filename', '')}\n```\n{(f.get('patch') or '')[:800]}\n```\n"
+                
+        prompt = (
+            "Você é um Engenheiro de Software Sênior analisando commits. "
+            "Leia os dados deste commit e crie um resumo curto (máximo 2 parágrafos) "
+            "explicando o que foi feito e o impacto dessa alteração na arquitetura.\n\n"
+            f"DADOS DO COMMIT:\n- Hash: {body.sha}\n- Autor: {body.author}\n- Data: {body.date}\n- Mensagem: {body.message}\n\n"
+            f"DIFF DO CÓDIGO:\n{diff_summary or 'Sem arquivos alterados disponíveis.'}"
+        )
+        
+        client = _genai.Client(api_key=x_gemini_key)
+        summary_text = ""
+        
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model="gemini-2.5-flash",
+                    contents=prompt,
+                    config=_types.GenerateContentConfig(
+                        temperature=0.3, 
+                        max_output_tokens=1024,
+                        response_mime_type="application/json",
+                        response_schema={"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
+                    ),
+                )
+                
+                try:
+                    resp_json = json.loads(response.text)
+                    summary_text = resp_json.get("summary", response.text)
+                except Exception:
+                    summary_text = response.text
+                break
+            except Exception as e:
+                logger.warning(f"[AI/Summarize] Tentativa {attempt + 1}/3 falhou: {str(e)[:120]}")
+                if attempt < 2:
+                    await asyncio.sleep(2)
+                else:
+                    summary_text = "O resumo automático está temporariamente indisponível devido a instabilidades na API ou Rate Limit."
+                    
+        return {"summary": summary_text}
+        
+    except Exception as general_err:
+        return {"summary": f"Erro interno ao gerar resumo: {str(general_err)}"}
+

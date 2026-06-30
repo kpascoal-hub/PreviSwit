@@ -1,8 +1,11 @@
 # Arquivos de ambiente (NUNCA commitar .env)
 .env
 
-# Relatórios gerados pelo agente
+# Relatórios gerados pelo agente (PDFs, JSONs brutos no backend)
 reports/
+# Exceção: pasta de páginas React de relatórios (frontend source code)
+!previswit-frontend/src/pages/reports/
+!previswit-frontend/src/pages/reports/**
 
 # Cache Python
 __pycache__/

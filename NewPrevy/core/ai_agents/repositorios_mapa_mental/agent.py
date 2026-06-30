@@ -208,7 +208,7 @@ class MapaMentalAgent:
                     config=types.GenerateContentConfig(
                         system_instruction=current_system_instruction,
                         temperature=0.4,
-                        max_output_tokens=2048,
+                        max_output_tokens=1048,
                     ),
                 )
                 answer = response.text.strip()
