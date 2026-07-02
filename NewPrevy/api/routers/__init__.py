@@ -12,6 +12,7 @@ from api.routers.reports      import router as reports_router
 from api.routers.integrations import router as integrations_router
 from api.routers.settings      import router as settings_router
 from api.routers.aspm_parsers  import router as aspm_parsers_router
+from api.routers.cloud         import router as cloud_router
 
 __all__ = [
     "auth_router",
@@ -24,4 +25,6 @@ __all__ = [
     "integrations_router",
     "settings_router",
     "aspm_parsers_router",
+    "cloud_router",
 ]
+

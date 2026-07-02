@@ -26,6 +26,7 @@ from api.routers.github import router as github_router
 from api.routers.aspm_parsers import router as aspm_parsers_router
 from api.routers.settings     import router as settings_router
 from api.routers.sast         import router as sast_router          # ← SAST Dispatch (Agente)
+from api.routers.cloud        import router as cloud_router         # ← Cloud Security & IaC (CSPM)
 from config import Config
 
 app = FastAPI(
@@ -78,6 +79,7 @@ app.include_router(aspm_parsers_router, prefix="/api/v1", tags=["ASPM Parsers (S
 app.include_router(github_router,       prefix="/api/v1", tags=["GitHub"])
 app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
 app.include_router(sast_router,         prefix="/api/v1", tags=["SAST Dispatch (Agent)"])
+app.include_router(cloud_router,        prefix="/api/v1", tags=["Cloud Security & IaC (CSPM)"])
 
 
 class ScanRequest(BaseModel):

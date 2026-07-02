@@ -10,6 +10,7 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import AssetsPage from './pages/assets/AssetsPage';
 import AssetsCategoryPage from './pages/assets/AssetsCategoryPage';
 import RepositoriesPage from './pages/assets/RepositoriesPage';
+import CloudPage from './pages/assets/CloudPage';
 import EngagementsPage from './pages/engagements/EngagementsPage';
 import FindingsPage from './pages/findings/FindingsPage';
 import AiInsightsPage from './pages/ai-insights/AiInsightsPage';
@@ -46,7 +47,7 @@ export default function App() {
           {/* Ativos & Produtos — visão geral + sub-categorias */}
           <Route path="assets" element={<AssetsPage />} />
           <Route path="assets/repositories" element={<RepositoriesPage />} />
-          <Route path="assets/cloud"        element={<AssetsCategoryPage />} />
+          <Route path="assets/cloud"        element={<CloudPage />} />
           <Route path="assets/containers"   element={<AssetsCategoryPage />} />
           <Route path="assets/vms"          element={<AssetsCategoryPage />} />
           <Route path="assets/domains"      element={<AssetsCategoryPage />} />
