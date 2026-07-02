@@ -73,7 +73,75 @@ export default function RiskGraphCanvas({ repo, onBack }) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setCommits(data.commits ?? []);
+        
+        // Hidratação do Estado via LocalStorage (Memória de Scan)
+        const fetchedCommits = data.commits ?? [];
+        const initialSast = {};
+        
+        fetchedCommits.forEach(c => {
+          let cached = localStorage.getItem('previswit_scan_' + c.sha);
+          
+          if (!cached) {
+            // A Herança de Fallback: Verifica se o repo pai já tem laudo
+            const currentRepoId = repo.name;
+            const parentRepoScan = localStorage.getItem('previswit_scan_' + currentRepoId);
+            if (parentRepoScan) {
+              try {
+                const parsedParent = JSON.parse(parentRepoScan);
+                const scannerRes = parsedParent.scanner_results || parsedParent;
+                let commitVulns = [];
+                
+                Object.values(scannerRes).forEach(toolOut => {
+                   if (Array.isArray(toolOut)) {
+                     toolOut.forEach(v => { if (JSON.stringify(v).includes(c.sha)) commitVulns.push(v); });
+                   } else if (toolOut && typeof toolOut === 'object') {
+                     const results = toolOut.results || toolOut.Results || toolOut.Vulnerabilities || [];
+                     if (Array.isArray(results)) {
+                       results.forEach(v => { if (JSON.stringify(v).includes(c.sha)) commitVulns.push(v); });
+                     }
+                   }
+                });
+                
+                if (commitVulns.length === 0) {
+                  cached = JSON.stringify({ inherited: true, clean: true, vulnerabilities: [] });
+                } else {
+                  cached = JSON.stringify({ inherited: true, clean: false, vulnerabilities: commitVulns });
+                }
+              } catch (e) {}
+            }
+          }
+
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              let isVuln = false;
+              
+              if (parsed.inherited && parsed.clean) {
+                isVuln = false;
+              } else if (Array.isArray(parsed)) {
+                isVuln = parsed.length > 0;
+              } else if (typeof parsed === 'object' && parsed !== null) {
+                isVuln = Object.values(parsed).some(arr => Array.isArray(arr) ? arr.length > 0 : Object.keys(arr || {}).length > 0);
+              }
+              
+              c.scanner_results = parsed;
+              initialSast[c.sha] = {
+                loading: false,
+                analysis: null,
+                scanner_results: parsed,
+                vulnerable: isVuln
+              };
+            } catch (e) {
+              console.error("Falha ao hidratar cache de scan do commit", c.sha);
+            }
+          }
+        });
+        
+        if (Object.keys(initialSast).length > 0) {
+          setSastResults(prev => ({ ...prev, ...initialSast }));
+        }
+        
+        setCommits(fetchedCommits);
 
         if (containerRef.current) {
           const viewportWidth = containerRef.current.clientWidth;
@@ -250,6 +318,9 @@ export default function RiskGraphCanvas({ repo, onBack }) {
 
       // Salva resultados técnicos e garante que `analysis` está nulo inicialmente
       setSastResults(prev => ({ ...prev, [sha]: { ...data, loading: false, analysis: null } }));
+      
+      // Gravação na Memória do Navegador para persistência em F5 / troca de abas
+      localStorage.setItem('previswit_scan_' + sha, JSON.stringify(data.scanner_results));
     } catch (e) {
       setSastResults(prev => ({ ...prev, [sha]: {
         loading: false,
@@ -1128,8 +1199,23 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                           const isPendingScan = !scanInfo && !hasScannerResults;
                           const isScanning = scanInfo && scanInfo.loading;
                           const isScanComplete = (scanInfo && !scanInfo.loading) || hasScannerResults;
-                          const isVuln = scanInfo ? scanInfo.vulnerable : false;
+                          let isVuln = scanInfo ? scanInfo.vulnerable : false;
                           
+                          // Correção Visual do Badge (Falso Contágio)
+                          if (commit.scanner_results) {
+                            if (commit.scanner_results.clean === true) {
+                              isVuln = false;
+                            } else if (Array.isArray(commit.scanner_results.vulnerabilities)) {
+                              isVuln = commit.scanner_results.vulnerabilities.length > 0;
+                            } else if (!commit.scanner_results.inherited) {
+                              // Se for um scan direto e não herdado, re-avaliamos os arrays das ferramentas
+                              if (Array.isArray(commit.scanner_results)) {
+                                isVuln = commit.scanner_results.length > 0;
+                              } else if (typeof commit.scanner_results === 'object') {
+                                isVuln = Object.values(commit.scanner_results).some(arr => Array.isArray(arr) ? arr.length > 0 : Object.keys(arr || {}).length > 0);
+                              }
+                            }
+                          }
                           return (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {isPendingScan && (

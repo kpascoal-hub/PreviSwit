@@ -1,0 +1,12 @@
+feat: aprimoramentos no motor SAST, IA Copilot e frontend
+
+Esta atualização traz diversas melhorias de estabilidade, precisão e experiência do usuário:
+
+Backend (SAST & IA):
+- sast.py: Adicionado suporte completo ao Checkov e Gitleaks no motor de varredura SAST, integrando-os na unificação de resultados.
+- ai_chat.py: Refatoração do AI Validation. Adicionado tratamento robusto para extração de achados do Checkov e Gitleaks. Melhorias nos prompts do Gemini (Modo Executivo vs Auditor) e implementado um fallback gracefull caso a API retorne erros de Rate Limit.
+- agent.py: Implementado Roteamento de Intenção (Intent Routing) para economia de tokens no Mapa Mental. O agente agora salva um cache efêmero (commits_context.json) e possui regras estritas na instrução de sistema proibindo a invenção de vulnerabilidades sem dados reais de scanners.
+
+Frontend (RiskGraphCanvas):
+- Adicionado Modal 'Análise Completa (Raw Data)' para exibir o JSON bruto detalhado retornado pelos scanners estruturais.
+- Melhoria no componente de exibição de relatórios do SAST, mapeando e apresentando achados de scanners (Semgrep, Trivy, Checkov, Gitleaks) de maneira granular na interface.

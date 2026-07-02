@@ -19,7 +19,9 @@ import {
   GitBranch, ArrowLeft, Link2, RefreshCw,
   Folder, AlertTriangle, ExternalLink,
   Lock, Unlock, GitFork, Star, Clock, Settings,
-  FileText, ChevronDown, CheckCircle
+  FileText, ChevronDown, CheckCircle, Shield, Zap,
+  Activity, Database, Code2, Terminal, ChevronRight,
+  TrendingUp, Eye
 } from 'lucide-react';
 import RiskGraphCanvas from './RiskGraphCanvas';
 
@@ -33,6 +35,17 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
+}
+
+/** Retorna cor de linguagem de programação. */
+function langColor(lang) {
+  const map = {
+    JavaScript: '#f7df1e', TypeScript: '#3178c6', Python: '#3572A5',
+    Java: '#b07219', Go: '#00ADD8', Rust: '#dea584', Ruby: '#701516',
+    C: '#555555', 'C++': '#f34b7d', 'C#': '#178600', PHP: '#4F5D95',
+    Swift: '#fa7343', Kotlin: '#A97BFF', Dart: '#00B4AB',
+  };
+  return map[lang] || '#8b949e';
 }
 
 /** Badge de criticidade. */
@@ -90,6 +103,42 @@ function RepositoryCard({ repo, openRiskGraph }) {
             setScanStatus(data.status);
             if (data.status === 'CONCLUÍDO') {
               setScanData(data.data);
+              // Gravação na Memória do Navegador para persistência em F5 / troca de abas
+              localStorage.setItem('previswit_scan_' + repo.name, JSON.stringify(data.data));
+              
+              // A Propagação Ativa (Cascade Hydration) para os Commits
+              const token = sessionStorage.getItem('GITHUB_TOKEN');
+              if (token) {
+                const owner = repo.owner || repo.name.split('/')[0] || 'kpascoal-hub';
+                const name = repo.name.includes('/') ? repo.name.split('/')[1] : repo.name;
+                fetch(`${API}/github/repos/${owner}/${name}/commits`, { headers: { 'X-GitHub-Token': token } })
+                  .then(r => r.json())
+                  .then(cData => {
+                    const commits = cData.commits || [];
+                    commits.forEach(commit => {
+                      const scannerRes = data.data.scanner_results || data.data;
+                      let commitVulns = [];
+                      
+                      Object.values(scannerRes).forEach(toolOut => {
+                         if (Array.isArray(toolOut)) {
+                           toolOut.forEach(v => { if (JSON.stringify(v).includes(commit.sha)) commitVulns.push(v); });
+                         } else if (toolOut && typeof toolOut === 'object') {
+                           const results = toolOut.results || toolOut.Results || toolOut.Vulnerabilities || [];
+                           if (Array.isArray(results)) {
+                             results.forEach(v => { if (JSON.stringify(v).includes(commit.sha)) commitVulns.push(v); });
+                           }
+                         }
+                      });
+                      
+                      if (commitVulns.length === 0) {
+                        localStorage.setItem('previswit_scan_' + commit.sha, JSON.stringify({ inherited: true, clean: true, vulnerabilities: [] }));
+                      } else {
+                        localStorage.setItem('previswit_scan_' + commit.sha, JSON.stringify({ inherited: true, clean: false, vulnerabilities: commitVulns }));
+                      }
+                    });
+                  }).catch(() => {});
+              }
+              
               clearInterval(interval);
             } else if (data.status === 'ERROR') {
               clearInterval(interval);
@@ -186,228 +235,296 @@ function RepositoryCard({ repo, openRiskGraph }) {
     openRiskGraph(repo);
   };
 
+  const effectiveScanData = scanData || repo.scanner_results;
+
   // Determina as cores e texto do badge de status
   let badgeProps = { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', label: '⏳ Pendente de Scan', icon: '' };
   if (scanStatus === 'PENDING' || scanStatus === 'RUNNING') {
     badgeProps = { bg: 'bg-blue-500/10', border: 'border-blue-500/25', text: 'text-blue-400', label: 'Analisando...', icon: '🔄 ' };
-  } else if (scanStatus === 'CONCLUÍDO' || scanData) {
-    badgeProps = { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', label: '🛡️ Scan Completo', icon: '' };
   } else if (scanStatus === 'ERROR') {
     badgeProps = { bg: 'bg-red-500/10', border: 'border-red-500/25', text: 'text-red-400', label: 'Erro no Scan', icon: '⚠️ ' };
+  } else if (scanStatus === 'CONCLUÍDO' || effectiveScanData) {
+    let isVuln = false;
+    if (effectiveScanData) {
+      if (effectiveScanData.clean === true || effectiveScanData.vulnerable === false) {
+        isVuln = false;
+      } else if (effectiveScanData.vulnerable === true) {
+        isVuln = true;
+      } else {
+        const sr = effectiveScanData.scanner_results || effectiveScanData;
+        if (Array.isArray(sr.vulnerabilities)) {
+          isVuln = sr.vulnerabilities.length > 0;
+        } else if (typeof sr === 'object') {
+          isVuln = Object.values(sr).some(toolOut => {
+            if (Array.isArray(toolOut)) return toolOut.length > 0;
+            if (toolOut && typeof toolOut === 'object') {
+              const res = toolOut.results || toolOut.Results || toolOut.Vulnerabilities || [];
+              return Array.isArray(res) && res.length > 0;
+            }
+            return false;
+          });
+        }
+      }
+    }
+    
+    if (isVuln) {
+      badgeProps = { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', label: '⚠️ Risco: HIGH', icon: '' };
+    } else {
+      badgeProps = { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', label: '🛡️ Código Seguro', icon: '' };
+    }
   }
+
+  // Detecta se o scan está em progresso (animação de pulso)
+  const isScanning = scanStatus === 'PENDING' || scanStatus === 'RUNNING';
+  const isConcluded = scanStatus === 'CONCLUÍDO' || !!effectiveScanData;
+  const repoShortName = repo.name?.split('/').pop() || repo.name;
 
   return (
     <div
       id={`repo-card-${slug}`}
-      className="group flex flex-col gap-3 p-5 rounded-xl border border-white/5 bg-slate-900/50
-                 hover:border-purple-500/25 hover:bg-[#111827] transition-all duration-200"
+      className="group relative flex flex-col rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/80 to-[#060b13]/90
+                 hover:border-purple-500/25 hover:shadow-xl hover:shadow-purple-500/5 transition-all duration-300 overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="shrink-0 p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
-            <GitBranch className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate group-hover:text-purple-200 transition-colors">
-              {repo.name}
-            </p>
-            <p className="text-[11px] text-gray-500 mt-0.5 truncate">
-              GitHub · {repo.language ?? 'Linguagem desconhecida'}
-            </p>
-          </div>
-        </div>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeProps.bg} ${badgeProps.text} ${badgeProps.border} whitespace-nowrap flex items-center gap-1`}>
-          {badgeProps.icon}{badgeProps.label}
-        </span>
-      </div>
+      {/* Linha decorativa superior colorida pelo status */}
+      <div className={`h-[2px] w-full ${badgeProps.text === 'text-emerald-400' ? 'bg-gradient-to-r from-emerald-500/60 to-teal-500/40' : badgeProps.text === 'text-red-400' ? 'bg-gradient-to-r from-red-500/60 to-orange-500/40' : badgeProps.text === 'text-blue-400' ? 'bg-gradient-to-r from-blue-500/60 to-cyan-500/40' : 'bg-gradient-to-r from-white/5 to-white/0'}`} />
 
-      {/* Meta strip */}
-      <div className="flex items-center gap-3 text-[11px] text-gray-600 mt-auto pt-2 border-t border-white/5">
-        {repo.language && (
-          <span className="flex items-center gap-1 text-blue-400/70">
-            <GitFork className="w-3 h-3" />
-            {repo.language}
-          </span>
-        )}
-        <span className="flex items-center gap-1 ml-auto">
-          <Clock className="w-3 h-3" />
-          {fmtDate(repo.updated_at)}
-        </span>
-      </div>
+      {/* Corpo principal do card */}
+      <div className="flex flex-col gap-4 p-5 flex-1">
 
-      {/* Primary Actions */}
-      <div className="flex gap-2 relative">
-        <button
-          id={`btn-scan-repo-${slug}`}
-          onClick={() => setShowScheduleModal(true)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
-                     rounded-lg border border-purple-500/25 text-purple-400
-                     hover:bg-purple-500/10 hover:border-purple-500/50 transition-all duration-150"
-        >
-          <Star className="w-3 h-3" />
-          Scan SAST
-        </button>
-
-        {showScheduleModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md">
-            <div className="w-full max-w-lg bg-[#060b13] border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
-              
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                  <Star className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Configuração de Orquestração SAST</h3>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Alvo: {repo.name}</p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                {/* Campo 1: Tempo Sob Demanda */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold text-gray-400">
-                      Frequência de Varredura
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={runOnce}
-                        onChange={(e) => setRunOnce(e.target.checked)}
-                        className="rounded border-white/10 bg-[#111827] text-purple-600 focus:ring-purple-500/50"
-                      />
-                      Rodar apenas uma vez agora
-                    </label>
-                  </div>
-                  
-                  {!runOnce && (
-                    <div className="flex gap-2 animate-in fade-in-50 duration-150">
-                      <div className="flex-1">
-                        <input
-                          type="number"
-                          placeholder="Ex: 30"
-                          value={intervalValue}
-                          onChange={(e) => setIntervalValue(e.target.value)}
-                          className="w-full bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
-                        />
-                      </div>
-                      <div className="relative w-1/3">
-                        <select
-                          value={intervalUnit}
-                          onChange={(e) => setIntervalUnit(e.target.value)}
-                          className="w-full appearance-none bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
-                        >
-                          <option value="MINUTES">Minutos</option>
-                          <option value="HOURS">Horas</option>
-                          <option value="DAYS">Dias</option>
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Campo 2: Foco da IA (Radio Cards) */}
-                <div className="space-y-3">
-                  <label className="block text-xs font-semibold text-gray-400">
-                    Foco da Inteligência Artificial
-                  </label>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    {/* Card 1: Executivo */}
-                    <div
-                      onClick={() => setSelectedAiLevel("EXECUTIVO")}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
-                                  ${selectedAiLevel === "EXECUTIVO"
-                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
-                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
-                    >
-                      <span className="text-sm shrink-0">📊</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold">Visão Executiva</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em riscos de negócio, conformidade regulatória e impactos estratégicos gerais.</p>
-                      </div>
-                    </div>
-
-                    {/* Card 2: Técnico */}
-                    <div
-                      onClick={() => setSelectedAiLevel("TECNICO")}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
-                                  ${selectedAiLevel === "TECNICO"
-                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
-                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
-                    >
-                      <span className="text-sm shrink-0">⚙️</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold">Visão Técnica</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em vulnerabilidades do código, referências de CWEs/OWASP e instruções diretas de refatoração.</p>
-                      </div>
-                    </div>
-
-                    {/* Card 3: Conformidade */}
-                    <div
-                      onClick={() => setSelectedAiLevel("CONFORMIDADE")}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
-                                  ${selectedAiLevel === "CONFORMIDADE"
-                                    ? "border-purple-500/50 bg-[#111827]/80 text-white"
-                                    : "border-white/5 text-gray-400 hover:border-white/15"}`}
-                    >
-                      <span className="text-sm shrink-0">🛡️</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold">Visão de Conformidade</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Mapeia achados de segurança diretamente com os controles de frameworks como ISO 27001 e SOC2.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="flex-1 py-2.5 rounded-lg border border-white/10 text-gray-400 text-xs font-medium hover:bg-white/5 hover:text-white transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleStartScan}
-                  className="flex-[1.5] py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5"
-                >
-                  🚀 Iniciar Orquestração
-                </button>
-              </div>
-
+        {/* Header: Ícone + Nome + Badge */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border ${isScanning ? 'bg-blue-500/10 border-blue-500/25' : isConcluded ? 'bg-purple-500/10 border-purple-500/20' : 'bg-slate-800/60 border-white/8'}`}>
+              {isScanning
+                ? <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                : <GitBranch className={`w-4 h-4 ${isConcluded ? 'text-purple-400' : 'text-gray-500 group-hover:text-gray-400 transition-colors'}`} />
+              }
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white truncate group-hover:text-purple-100 transition-colors" title={repo.name}>
+                {repoShortName}
+              </p>
+              {repo.name?.includes('/') && (
+                <p className="text-[10px] text-gray-600 truncate mt-0.5">{repo.name}</p>
+              )}
             </div>
           </div>
+
+          <span className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full border ${badgeProps.bg} ${badgeProps.text} ${badgeProps.border} whitespace-nowrap flex items-center gap-1 tracking-wide`}>
+            {isScanning && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
+            {badgeProps.icon}{badgeProps.label}
+          </span>
+        </div>
+
+        {/* Metadata row: Linguagem + Data */}
+        <div className="flex items-center gap-3">
+          {repo.language && (
+            <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.06] rounded-lg px-2.5 py-1">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: langColor(repo.language) }} />
+              <span className="text-[11px] font-medium text-gray-400">{repo.language}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-600 ml-auto">
+            <Clock className="w-3 h-3" />
+            {fmtDate(repo.updated_at)}
+          </div>
+        </div>
+
+        {/* Scan Result Preview (quando concluído) */}
+        {isConcluded && effectiveScanData?.ai_insight && (
+          <div className="bg-white/[0.03] border border-white/[0.05] rounded-xl p-3">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1.5 flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-purple-400" />
+              AI Insight
+            </p>
+            <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">
+              {effectiveScanData.ai_insight}
+            </p>
+          </div>
         )}
 
-        <button
-          onClick={handleOpenDeepDive}
-          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
-                     rounded-lg border border-teal-500/25 text-teal-400
-                     hover:bg-teal-500/10 hover:border-teal-500/50 transition-all duration-150"
-          title="Abrir Grafo de Risco (Deep Dive)"
-        >
-          <Settings className="w-3 h-3" />
-          Deep Dive
-        </button>
-      </div>
+        {/* Separador */}
+        <div className="border-t border-white/[0.04] -mx-5" />
 
-      {/* Compliance Action */}
-      <div className="mt-1">
-        <button
-          onClick={handleGenerateComplianceReport}
-          disabled={scanStatus !== 'CONCLUÍDO' || isGeneratingPdf}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
-                     rounded-lg border border-white/10 bg-white/5 text-gray-400
-                     hover:bg-white/10 hover:text-white transition-all duration-150
-                     disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Gera um PDF Executivo do scan concluído"
-        >
-          {isGeneratingPdf ? <RefreshCw className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
-          📄 Gerar Relatório de Conformidade
-        </button>
+        {/* Actions */}
+        <div className="flex flex-col gap-2">
+          {/* Linha principal: Scan SAST + Deep Dive */}
+          <div className="flex gap-2 relative">
+            <button
+              id={`btn-scan-repo-${slug}`}
+              onClick={() => setShowScheduleModal(true)}
+              disabled={isScanning}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold
+                         rounded-xl border border-purple-500/25 text-purple-400
+                         hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-300
+                         transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isScanning
+                ? <><span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />Analisando</>
+                : <><Terminal className="w-3 h-3" />Scan SAST</>
+              }
+            </button>
+
+            {showScheduleModal && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md">
+                <div className="w-full max-w-lg bg-[#060b13] border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                      <Terminal className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Configuração de Orquestração SAST</h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Alvo: {repo.name}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    {/* Campo 1: Tempo Sob Demanda */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold text-gray-400">
+                          Frequência de Varredura
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={runOnce}
+                            onChange={(e) => setRunOnce(e.target.checked)}
+                            className="rounded border-white/10 bg-[#111827] text-purple-600 focus:ring-purple-500/50"
+                          />
+                          Rodar apenas uma vez agora
+                        </label>
+                      </div>
+                      
+                      {!runOnce && (
+                        <div className="flex gap-2 animate-in fade-in-50 duration-150">
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              placeholder="Ex: 30"
+                              value={intervalValue}
+                              onChange={(e) => setIntervalValue(e.target.value)}
+                              className="w-full bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
+                            />
+                          </div>
+                          <div className="relative w-1/3">
+                            <select
+                              value={intervalUnit}
+                              onChange={(e) => setIntervalUnit(e.target.value)}
+                              className="w-full appearance-none bg-[#111827] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500/50 transition-colors"
+                            >
+                              <option value="MINUTES">Minutos</option>
+                              <option value="HOURS">Horas</option>
+                              <option value="DAYS">Dias</option>
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Campo 2: Foco da IA (Radio Cards) */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-semibold text-gray-400">
+                        Foco da Inteligência Artificial
+                      </label>
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {/* Card 1: Executivo */}
+                        <div
+                          onClick={() => setSelectedAiLevel("EXECUTIVO")}
+                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                      ${selectedAiLevel === "EXECUTIVO"
+                                        ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                        : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                        >
+                          <span className="text-sm shrink-0">📊</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold">Visão Executiva</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em riscos de negócio, conformidade regulatória e impactos estratégicos gerais.</p>
+                          </div>
+                        </div>
+
+                        {/* Card 2: Técnico */}
+                        <div
+                          onClick={() => setSelectedAiLevel("TECNICO")}
+                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                      ${selectedAiLevel === "TECNICO"
+                                        ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                        : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                        >
+                          <span className="text-sm shrink-0">⚙️</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold">Visão Técnica</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Foco em vulnerabilidades do código, referências de CWEs/OWASP e instruções diretas de refatoração.</p>
+                          </div>
+                        </div>
+
+                        {/* Card 3: Conformidade */}
+                        <div
+                          onClick={() => setSelectedAiLevel("CONFORMIDADE")}
+                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 bg-[#0d1421]/60
+                                      ${selectedAiLevel === "CONFORMIDADE"
+                                        ? "border-purple-500/50 bg-[#111827]/80 text-white"
+                                        : "border-white/5 text-gray-400 hover:border-white/15"}`}
+                        >
+                          <span className="text-sm shrink-0">🛡️</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold">Visão de Conformidade</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">Mapeia achados de segurança diretamente com os controles de frameworks como ISO 27001 e SOC2.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      onClick={() => setShowScheduleModal(false)}
+                      className="flex-1 py-2.5 rounded-lg border border-white/10 text-gray-400 text-xs font-medium hover:bg-white/5 hover:text-white transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleStartScan}
+                      className="flex-[1.5] py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      🚀 Iniciar Orquestração
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleOpenDeepDive}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold
+                         rounded-xl border border-teal-500/25 text-teal-400
+                         hover:bg-teal-500/10 hover:border-teal-500/40 hover:text-teal-300
+                         transition-all duration-150"
+              title="Abrir Grafo de Risco (Deep Dive)"
+            >
+              <Eye className="w-3 h-3" />
+              Deep Dive
+            </button>
+          </div>
+
+          {/* Compliance Action */}
+          <button
+            onClick={handleGenerateComplianceReport}
+            disabled={scanStatus !== 'CONCLUÍDO' || isGeneratingPdf}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold
+                       rounded-xl border border-white/[0.08] bg-white/[0.03] text-gray-500
+                       hover:bg-white/[0.07] hover:text-gray-300 hover:border-white/15 transition-all duration-150
+                       disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Gera um PDF Executivo do scan concluído"
+          >
+            {isGeneratingPdf ? <RefreshCw className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+            Gerar Relatório de Conformidade
+          </button>
+        </div>
       </div>
 
       {/* Local Toast Cyber Dark */}
@@ -427,26 +544,32 @@ function RepositoriesEmptyState({ onConnect }) {
   return (
     <div
       id="repositories-empty-state"
-      className="flex flex-col items-center justify-center p-10 mt-6
-                 border border-dashed border-slate-800 rounded-xl
-                 bg-slate-900/20 text-slate-500"
+      className="flex flex-col items-center justify-center p-16 mt-4
+                 border border-dashed border-white/[0.06] rounded-2xl
+                 bg-gradient-to-b from-[#0d1421]/40 to-transparent"
     >
-      <div className="p-4 rounded-xl bg-white/3 border border-white/5 mb-4">
-        <Folder className="w-10 h-10 text-gray-600" />
+      <div className="relative mb-6">
+        <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+          <GitBranch className="w-7 h-7 text-purple-400/60" />
+        </div>
+        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+          <span className="text-[10px]">?</span>
+        </div>
       </div>
-      <p className="text-sm font-medium text-gray-400 text-center">
-        Nenhum repositório sincronizado.
+      <p className="text-sm font-semibold text-gray-300 text-center">
+        Nenhum repositório sincronizado
       </p>
-      <p className="text-xs text-gray-600 text-center mt-1 max-w-xs">
-        Clique em{' '}
-        <button
-          onClick={onConnect}
-          className="text-purple-400 hover:underline"
-        >
-          Conectar GitHub
-        </button>{' '}
-        para importar sua base de código e começar os scans SAST.
+      <p className="text-xs text-gray-600 text-center mt-2 max-w-xs leading-relaxed">
+        Conecte sua conta do GitHub para importar sua base de código e iniciar os scans SAST do Quarteto Fantástico.
       </p>
+      <button
+        onClick={onConnect}
+        className="mt-6 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold
+                   bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/25 transition-all"
+      >
+        <Link2 className="w-4 h-4" />
+        Conectar GitHub
+      </button>
     </div>
   );
 }
@@ -467,8 +590,8 @@ function ConnectModal({ open, onClose, onConnectSuccess }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md bg-[#0d1421] border border-white/10 rounded-2xl p-6 shadow-2xl">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
             <Link2 className="w-5 h-5 text-purple-400" />
           </div>
           <div>
@@ -575,8 +698,21 @@ export default function RepositoriesPage() {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
-      // O campo "repos" contém a lista mapeada retornada pelo github router
-      setRepositories(data.repos ?? []);
+      const fetchedRepos = data.repos ?? [];
+      
+      // Hidratação do Estado via LocalStorage (Memória de Scan)
+      fetchedRepos.forEach(r => {
+        const cached = localStorage.getItem('previswit_scan_' + r.name);
+        if (cached) {
+          try {
+            r.scanner_results = JSON.parse(cached);
+          } catch (e) {
+            console.error("Falha ao hidratar cache de scan do repositório", r.name);
+          }
+        }
+      });
+      
+      setRepositories(fetchedRepos);
       setLastSync(new Date());
     } catch (err) {
       setError(err.message);
@@ -589,6 +725,11 @@ export default function RepositoriesPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   const hasRepos = repositories.length > 0;
+
+  // KPI Computados
+  const scannedCount = repositories.filter(r => !!r.scanner_results).length;
+  const langCount = new Set(repositories.map(r => r.language).filter(Boolean)).size;
+  const pendingCount = repositories.length - scannedCount;
 
   if (activeView === 'canvas' && selectedRepo) {
     return <RiskGraphCanvas repo={selectedRepo} onBack={() => setActiveView('list')} />;
@@ -605,27 +746,28 @@ export default function RepositoriesPage() {
         className="view-section w-full flex flex-col gap-6"
       >
 
-        {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
+        {/* ── Cabeçalho Premium ──────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-1">
             {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5">
+              <NavLink
+                to="/assets"
+                className="text-xs text-gray-600 hover:text-gray-400 flex items-center gap-1 transition-colors"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                Ativos &amp; Produtos
+              </NavLink>
+              <span className="text-gray-700">/</span>
+              <span className="text-xs text-purple-400 font-medium">Repositórios</span>
+            </div>
             <div>
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <NavLink
-                  to="/assets"
-                  className="text-xs text-gray-600 hover:text-gray-400 flex items-center gap-1 transition-colors"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                  Ativos & Produtos
-                </NavLink>
-                <span className="text-gray-700">/</span>
-                <span className="text-xs text-purple-400 font-medium">Repositórios</span>
-              </div>
-              <h1 className="text-xl font-semibold text-white">
-                Gestão de Repositórios de Código
+              <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
+                <GitBranch className="w-5 h-5 text-purple-400" />
+                Gestão de Repositórios
               </h1>
               <p className="text-sm text-gray-500 mt-0.5">
-                Inventário de repositórios Git — base para scans SAST e análise de supply chain.
+                Inventário de código-fonte · Análise SAST · Supply Chain Visibility
               </p>
             </div>
           </div>
@@ -633,16 +775,19 @@ export default function RepositoriesPage() {
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
             {lastSync && (
-              <span className="text-[11px] text-gray-600">
-                Sync: {lastSync.toLocaleTimeString('pt-BR')}
-              </span>
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <Activity className="w-3 h-3 text-emerald-400" />
+                <span className="text-[11px] text-gray-500">
+                  Sync {lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
             )}
             <button
               id="btn-refresh-repositories"
               onClick={fetchRepositories}
               disabled={loading}
               title="Atualizar lista"
-              className="p-2 rounded-lg border border-white/8 text-gray-500 hover:text-white
+              className="p-2 rounded-lg border border-white/[0.08] text-gray-500 hover:text-white
                          hover:bg-white/5 hover:border-white/20 transition-all disabled:opacity-40"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -652,7 +797,7 @@ export default function RepositoriesPage() {
             <button
               id="btn-connect-github"
               onClick={() => setConnectOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
                          bg-purple-600 hover:bg-purple-500 text-white
                          shadow-lg shadow-purple-500/20 transition-all duration-200"
             >
@@ -662,25 +807,53 @@ export default function RepositoriesPage() {
           </div>
         </div>
 
-        {/* ── KPI strip ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* ── KPI Strip Premium ──────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total', value: loading ? '…' : repositories.length, color: 'text-white' },
+            {
+              label: 'Total de Repos',
+              value: loading ? '—' : repositories.length,
+              color: 'text-white',
+              icon: <Database className="w-4 h-4 text-purple-400" />,
+              sub: 'sincronizados',
+              accent: 'border-purple-500/15 hover:border-purple-500/30'
+            },
+            {
+              label: 'Scans Completos',
+              value: loading ? '—' : scannedCount,
+              color: 'text-emerald-400',
+              icon: <Shield className="w-4 h-4 text-emerald-400" />,
+              sub: 'analisados',
+              accent: 'border-emerald-500/15 hover:border-emerald-500/25'
+            },
             {
               label: 'Linguagens',
-              value: loading ? '…' : new Set(repositories.map(r => r.language).filter(Boolean)).size,
+              value: loading ? '—' : langCount,
               color: 'text-blue-400',
+              icon: <Code2 className="w-4 h-4 text-blue-400" />,
+              sub: 'detectadas',
+              accent: 'border-blue-500/15 hover:border-blue-500/25'
             },
             {
-              label: 'Sem Scan',
-              value: loading ? '…' : repositories.length,
+              label: 'Aguardando Scan',
+              value: loading ? '—' : pendingCount,
               color: 'text-amber-400',
+              icon: <TrendingUp className="w-4 h-4 text-amber-400" />,
+              sub: 'pendentes',
+              accent: 'border-amber-500/15 hover:border-amber-500/25'
             },
           ].map(stat => (
-            <div key={stat.label} className="bg-[#0d1421] border border-white/5 rounded-xl p-4 flex items-center gap-3">
-              <div className="flex-1">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider">{stat.label}</p>
-                <p className={`text-2xl font-bold mt-0.5 ${stat.color}`}>{stat.value}</p>
+            <div
+              key={stat.label}
+              className={`bg-gradient-to-b from-[#0d1421]/70 to-[#060b13]/60 border ${stat.accent} rounded-2xl p-4 flex items-center gap-3 transition-all duration-200`}
+            >
+              <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
+                {stat.icon}
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-600 uppercase tracking-wider font-semibold">{stat.label}</p>
+                <p className={`text-2xl font-bold mt-0.5 ${stat.color} leading-none`}>{stat.value}</p>
+                <p className="text-[10px] text-gray-700 mt-0.5">{stat.sub}</p>
               </div>
             </div>
           ))}
@@ -704,23 +877,34 @@ export default function RepositoriesPage() {
         {/* ── Loading spinner ────────────────────────────────────────────── */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <div className="relative">
+              <div className="w-8 h-8 border-2 border-purple-500/30 rounded-full" />
+              <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin absolute inset-0" />
+            </div>
             <p className="text-sm text-gray-500">Sincronizando repositórios…</p>
           </div>
         )}
 
-        {/* ── Grid dinâmico (repositories-grid) ─────────────────────────── */}
-        {/* IMPORTANTE: Esta div começa VAZIA no HTML.                       */}
-        {/* Os cards são injetados dinamicamente via fetchRepositories().     */}
+        {/* ── Seção: Repositórios ────────────────────────────────────────── */}
         {!loading && hasRepos && (
-          <div
-            id="repositories-grid"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-          >
-            {repositories.map((repo, idx) => (
-              <RepositoryCard key={repo.name ?? idx} repo={repo} openRiskGraph={openRiskGraph} />
-            ))}
-          </div>
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                <span className="w-1 h-4 rounded-full bg-purple-500/60" />
+                {repositories.length} repositório{repositories.length !== 1 ? 's' : ''} encontrado{repositories.length !== 1 ? 's' : ''}
+              </h2>
+            </div>
+
+            {/* Grid dinâmico (repositories-grid) */}
+            <div
+              id="repositories-grid"
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+            >
+              {repositories.map((repo, idx) => (
+                <RepositoryCard key={repo.name ?? idx} repo={repo} openRiskGraph={openRiskGraph} />
+              ))}
+            </div>
+          </>
         )}
 
         {/* ── Empty state (repositories-empty-state) ────────────────────── */}
