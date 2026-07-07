@@ -27,6 +27,7 @@ from api.routers.aspm_parsers import router as aspm_parsers_router
 from api.routers.settings     import router as settings_router
 from api.routers.sast         import router as sast_router          # ← SAST Dispatch (Agente)
 from api.routers.cloud        import router as cloud_router         # ← Cloud Security & IaC (CSPM)
+from api.routers.containers   import router as containers_router    # ← Container Security (Trivy Image)
 from config import Config
 
 app = FastAPI(
@@ -80,6 +81,7 @@ app.include_router(github_router,       prefix="/api/v1", tags=["GitHub"])
 app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & Users"])
 app.include_router(sast_router,         prefix="/api/v1", tags=["SAST Dispatch (Agent)"])
 app.include_router(cloud_router,        prefix="/api/v1", tags=["Cloud Security & IaC (CSPM)"])
+app.include_router(containers_router,   prefix="/api/v1", tags=["Container Security (Trivy Image)"])
 
 
 class ScanRequest(BaseModel):
