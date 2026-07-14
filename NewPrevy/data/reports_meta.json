@@ -1,16 +1,1 @@
-[
-  {
-    "id": "b968a6ad-9918-4b86-acf1-1820658d4361",
-    "title": "Conformidade TECNICO — PreviSwit",
-    "target": "repo:PreviSwit",
-    "target_label": "PreviSwit",
-    "type": "Scan de Repositório",
-    "standard": "OWASP Top 10",
-    "risk": "CLEAN",
-    "compliance_model": "TECNICO",
-    "status": "ready",
-    "requested_at": "2026-06-30T14:02:36.111143Z",
-    "completed_at": "2026-06-30T14:02:36.111154Z",
-    "has_scan_data": true
-  }
-]
+[]
