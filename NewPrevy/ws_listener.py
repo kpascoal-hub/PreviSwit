@@ -26,6 +26,9 @@ from modules.system.health import get_agent_capabilities
 # ─── Runners SAST individuais ───────────────────────────────────────────
 from core.scanners.sast_runner import run_semgrep, run_gitleaks, run_checkov
 
+# ─── Motor do Gêmeo Efêmero (Modo HOT) ────────────────────────────────────────
+from core.ephemeral_clone import EphemeralManager, EphemeralCloneError
+
 # ─── Configuração ───────────────────────────────────────────────────────────
 WS_URI = os.getenv(
     "PREVISWIT_WS_URI",
@@ -59,6 +62,164 @@ def _run_scan_blocking(target: str, pipeline: str = "all") -> tuple[dict, dict]:
     return run_scan(target=target, pipeline=pipeline)
 
 
+async def _handle_ephemeral_scan(ws, original_target: str, pipeline: str) -> None:
+    """
+    Orquestra o ciclo completo do Gêmeo Efêmero (Modo HOT):
+      1. spin_up()  — clona, builda e sobe o container Docker descartável
+      2. Scan       — executa o pipeline apontando para a URL local do clone
+      3. teardown() — SEMPRE destroi o clone, mesmo em caso de falha (try/finally)
+
+    Envia eventos de status para o dashboard via WebSocket em cada etapa.
+    """
+    mgr         = EphemeralManager()
+    clone_info  = None
+    scan_target = original_target   # será substituído pela URL local após spin_up
+
+    # ── 1. Notifica: construindo o Gêmeo ──────────────────────────────────────
+    await ws.send(json.dumps({
+        "action":  "LOG",
+        "message": f"[EPHEMERAL] Iniciando construção do Gêmeo Efêmero para: {original_target}",
+    }))
+    await ws.send(json.dumps({
+        "agent":   AGENT_ID,
+        "status":  "ephemeral_building",
+        "target":  original_target,
+        "message": "Gêmeo Efêmero em construção...",
+        "ts":      datetime.now(timezone.utc).isoformat(),
+    }))
+
+    # ── 2. spin_up() em thread (pode demorar — clone + docker build) ───────────
+    try:
+        clone_info = await asyncio.to_thread(mgr.spin_up, original_target)
+        scan_target = clone_info["local_url"]
+
+        log.info("[Ephemeral] Gêmeo ATIVO — %s  (clone_id=%s)", scan_target, clone_info["clone_id"])
+
+        await ws.send(json.dumps({
+            "action":  "LOG",
+            "message": (
+                f"[EPHEMERAL] Gêmeo Efêmero ATIVO — {scan_target} "
+                f"(clone_id={clone_info['clone_id']})"
+            ),
+        }))
+        await ws.send(json.dumps({
+            "agent":    AGENT_ID,
+            "status":   "ephemeral_ready",
+            "clone_id": clone_info["clone_id"],
+            "local_url": scan_target,
+            "ts":       datetime.now(timezone.utc).isoformat(),
+        }))
+
+    except EphemeralCloneError as build_err:
+        # Build falhou — não há clone para destruir (ou destruição segura foi tentada)
+        log.error("[Ephemeral] Falha no spin_up: %s", build_err)
+        await ws.send(json.dumps({
+            "action":  "LOG",
+            "message": f"[EPHEMERAL] ERRO no build do Gêmeo: {build_err}",
+        }))
+        await ws.send(json.dumps({
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "status": "SCAN_ERROR",
+            "target": original_target,
+            "error":  f"Falha na criação do Gêmeo Efêmero: {build_err}",
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }))
+        # teardown preventivo caso spin_up tenha criado recursos parciais
+        if clone_info:
+            await asyncio.to_thread(mgr.teardown, clone_info)
+        return
+
+    # ── 3. Executa o scan apontando para o Gêmeo — teardown GARANTIDO ─────────
+    response: dict = {}
+    try:
+        await ws.send(json.dumps({
+            "action":  "LOG",
+            "message": f"[EPHEMERAL] Iniciando pipeline '{pipeline}' no Gêmeo: {scan_target}",
+        }))
+
+        # Roda o pipeline na URL local do clone (thread para não bloquear o loop)
+        results, report_paths = await asyncio.to_thread(
+            _run_scan_blocking, scan_target, pipeline
+        )
+
+        json_path = report_paths.get("json")
+        if not json_path:
+            raise FileNotFoundError("run_scan não retornou caminho do JSON.")
+
+        def _read_json(path: str) -> dict:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+
+        json_data = await asyncio.to_thread(_read_json, json_path)
+
+        # Enriquece o resultado com metadados do clone
+        json_data["_ephemeral_meta"] = {
+            "clone_id":        clone_info["clone_id"],
+            "original_target": original_target,
+            "local_url":       scan_target,
+            "mode":            "hot",
+        }
+
+        response = {
+            "action": "SCAN_RESULT",
+            "target": original_target,   # retorna ao frontend com o target original
+            "data":   json_data,
+        }
+        log.info("[Ephemeral] Scan concluído — %d bytes", len(json.dumps(json_data, default=str)))
+
+    except FileNotFoundError as fnf:
+        log.error("[Ephemeral] JSON não encontrado: %s", fnf)
+        response = {
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "status": "SCAN_ERROR",
+            "target": original_target,
+            "error":  str(fnf),
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        log.exception("[Ephemeral] Erro inesperado no scan do Gêmeo: %s", exc)
+        response = {
+            "action": "SCAN_RESULT",
+            "agent":  AGENT_ID,
+            "status": "SCAN_ERROR",
+            "target": original_target,
+            "error":  str(exc),
+            "ts":     datetime.now(timezone.utc).isoformat(),
+        }
+
+    finally:
+        # ── TEARDOWN OBRIGATÓRIO — executa mesmo em caso de exceção ───────────
+        await ws.send(json.dumps({
+            "action":  "LOG",
+            "message": f"[EPHEMERAL] Destruindo Gêmeo {clone_info['clone_id']}...",
+        }))
+
+        try:
+            await asyncio.to_thread(mgr.teardown, clone_info)
+        except Exception as td_err:
+            log.warning("[Ephemeral] Falha no teardown (não crítica): %s", td_err)
+
+        await ws.send(json.dumps({
+            "agent":    AGENT_ID,
+            "status":   "ephemeral_destroyed",
+            "clone_id": clone_info["clone_id"],
+            "message":  "Gêmeo obliterado com sucesso.",
+            "ts":       datetime.now(timezone.utc).isoformat(),
+        }))
+        await ws.send(json.dumps({
+            "action":  "LOG",
+            "message": f"[EPHEMERAL] Gêmeo {clone_info['clone_id']} obliterado com sucesso.",
+        }))
+
+    # ── 4. Envia resultado ao dashboard ───────────────────────────────────────
+    if response:
+        await ws.send(json.dumps(response, default=str))
+
+
+
+
 # ─── Handlers ───────────────────────────────────────────────────────────────
 
 async def handle_message(ws, raw: str):
@@ -82,8 +243,9 @@ async def handle_message(ws, raw: str):
     # ── START_SCAN ──────────────────────────────────────────────────────
     if action == "START_SCAN" and target:
         pipeline = msg.get("pipeline", "all")
-        log.info("📡 ORDEM RECEBIDA  →  action=%s  target=%s  pipeline=%s",
-                 action, target, pipeline)
+        mode     = msg.get("mode", "safe")   # "safe" (Carga Seca) ou "hot" (Gêmeo Efêmero)
+        log.info("📡 ORDEM RECEBIDA  →  action=%s  target=%s  pipeline=%s  mode=%s",
+                 action, target, pipeline, mode)
 
         # Notifica o servidor que o scan está começando
         await ws.send(json.dumps({
@@ -93,6 +255,12 @@ async def handle_message(ws, raw: str):
             "ts":     datetime.now(timezone.utc).isoformat(),
         }))
 
+        # ── Modo HOT: Gêmeo Efêmero ──────────────────────────────────────
+        if mode == "hot":
+            await _handle_ephemeral_scan(ws, target, pipeline)
+            return
+
+        # ── Modo SAFE: Scan direto no alvo ───────────────────────────────
         try:
             # Roda o pipeline inteiro em thread separada para não
             # bloquear o event-loop e manter o WebSocket vivo.
