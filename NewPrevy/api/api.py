@@ -206,6 +206,7 @@ async def websocket_dashboard(websocket: WebSocket):
             # Ações que devem ser encaminhadas diretamente ao agente
             _AGENT_ACTIONS = {
                 "START_SCAN",
+                "START_DAST_SCAN",   # DAST / Superfície de Ataque (Domínios & APIs)
                 "RUN_SEMGREP",
                 "RUN_GITLEAKS",
                 "RUN_CHECKOV",

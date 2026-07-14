@@ -12,6 +12,7 @@ import AssetsCategoryPage from './pages/assets/AssetsCategoryPage';
 import RepositoriesPage from './pages/assets/RepositoriesPage';
 import CloudPage from './pages/assets/CloudPage';
 import ContainersPage from './pages/assets/ContainersPage';
+import DomainsPage from './pages/assets/DomainsPage';
 import EngagementsPage from './pages/engagements/EngagementsPage';
 import FindingsPage from './pages/findings/FindingsPage';
 import AiInsightsPage from './pages/ai-insights/AiInsightsPage';
@@ -51,7 +52,7 @@ export default function App() {
           <Route path="assets/cloud"        element={<CloudPage />} />
           <Route path="assets/containers"   element={<ContainersPage />} />
           <Route path="assets/vms"          element={<AssetsCategoryPage />} />
-          <Route path="assets/domains"      element={<AssetsCategoryPage />} />
+          <Route path="assets/domains"      element={<DomainsPage />} />
 
           <Route path="pentest"     element={<EngagementsPage />} />
           <Route path="findings"    element={<FindingsPage />} />
