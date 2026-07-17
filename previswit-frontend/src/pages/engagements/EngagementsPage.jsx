@@ -650,7 +650,7 @@ export default function EngagementsPage() {
                   onChange={e => setSchFreq(e.target.value)}
                   className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/40 transition-all"
                 >
-                  {FREQ_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} {f.cron ? `(${f.cron})` : ''}</option>)}
+                  {FREQ_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
               </div>
 
@@ -662,7 +662,7 @@ export default function EngagementsPage() {
                     type="text"
                     value={schCron}
                     onChange={e => setSchCron(e.target.value)}
-                    placeholder="Ex: 0 6 * * 1-5"
+                    placeholder="Formato: minuto hora dia-mês mês dia-semana  (ex: toda segunda às 06h → 0 6 * * 1)"
                     className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm font-mono text-amber-400 placeholder:text-gray-600 focus:outline-none focus:border-amber-500/40 transition-all"
                   />
                 </div>
