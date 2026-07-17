@@ -170,23 +170,7 @@ COPY --chown=appuser:appuser . .`;
 # Referência: ${vuln.cve ? 'https://nvd.nist.gov/vuln/detail/' + vuln.cve : 'Consulte a documentação da ferramenta'}`;
 }
 
-// ── Mock de chat com respostas temáticas ──────────────────────────────────────
 
-const MOCK_RESPONSES = [
-  'Analisando o contexto de segurança da sua aplicação...',
-  'Com base nos laudos carregados, o vetor de maior risco está na camada de autenticação. Recomendo revisar os controles de sessão.',
-  'Esta vulnerabilidade possui exploits públicos documentados no ExploitDB. A probabilidade de exploração ativa é alta — priorize a remediação.',
-  'Para conformidade com LGPD Art. 46, é necessário implementar controles técnicos que garantam a integridade e confidencialidade dos dados pessoais tratados.',
-  'O patch sugerido segue as diretrizes do OWASP Top 10 2023 — especificamente A03:2021 (Injection). Aplique em ambiente de homologação primeiro.',
-  'Baseado no seu contexto, o impacto financeiro estimado considera: custo de resposta a incidente, multas regulatórias (LGPD: até 2% do faturamento) e danos reputacionais.',
-];
-
-let mockIdx = 0;
-function getMockResponse() {
-  const r = MOCK_RESPONSES[mockIdx % MOCK_RESPONSES.length];
-  mockIdx++;
-  return r;
-}
 
 // ── Componente: Threat Intel Card ─────────────────────────────────────────────
 
@@ -355,8 +339,8 @@ export default function AiInsightsPage() {
   const patchCode = useMemo(() => selected ? buildPatch(selected) : '', [selected]);
   const sC        = selected ? sevStyle(selected.severity) : null;
 
-  // Envia mensagem no chat
-  const handleSend = useCallback(() => {
+  // Envia mensagem no chat (Real API Call)
+  const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
 
@@ -366,13 +350,53 @@ export default function AiInsightsPage() {
     setInput('');
     setIsTyping(true);
 
-    // Mock: resposta da IA após 1.2s
-    setTimeout(() => {
-      const aiMsg = { id: Date.now() + 1, role: 'ai', content: getMockResponse(), time: new Date().toLocaleTimeString('pt-BR', { hour12: false }) };
+    try {
+      const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
+      
+      const contextText = selected 
+        ? `[Contexto Oculto] O usuário está visualizando a seguinte vulnerabilidade: "${selected.title}" (Severidade: ${selected.severity}, Alvo: ${selected.target}). Detalhes: ${selected.description}`
+        : '';
+
+      const res = await fetch('/api/v1/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': geminiKey
+        },
+        body: JSON.stringify({
+          session_id: 'global_insights_copilot',
+          prompt: text,
+          prompt_type: 'chat',
+          context: contextText
+        })
+      });
+
+      if (!res.ok) {
+        let errStr = 'Erro na comunicação com a API Gemini.';
+        try { const errData = await res.json(); errStr = errData.detail || errStr; } catch(e){}
+        throw new Error(errStr);
+      }
+
+      const data = await res.json();
+      const aiMsg = { 
+        id: Date.now() + 1, 
+        role: 'ai', 
+        content: data.response || 'Sem resposta do modelo.', 
+        time: new Date().toLocaleTimeString('pt-BR', { hour12: false }) 
+      };
       setMessages(prev => [...prev, aiMsg]);
+    } catch (err) {
+      const errMsg = { 
+        id: Date.now() + 1, 
+        role: 'ai', 
+        content: `⚠️ Falha: ${err.message}`, 
+        time: new Date().toLocaleTimeString('pt-BR', { hour12: false }) 
+      };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1200);
-  }, [input]);
+    }
+  }, [input, selected]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
