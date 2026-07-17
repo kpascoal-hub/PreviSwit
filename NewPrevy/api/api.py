@@ -28,6 +28,8 @@ from api.routers.settings     import router as settings_router
 from api.routers.sast         import router as sast_router          # ← SAST Dispatch (Agente)
 from api.routers.cloud        import router as cloud_router         # ← Cloud Security & IaC (CSPM)
 from api.routers.containers   import router as containers_router    # ← Container Security (Trivy Image)
+from api.routers.schedules    import router as schedules_router     # ← Pentests Contínuos (Scheduler)
+from api        import scheduler as sched_engine
 from config import Config
 
 app = FastAPI(
@@ -82,6 +84,13 @@ app.include_router(settings_router,     prefix="/api/v1", tags=["Settings & User
 app.include_router(sast_router,         prefix="/api/v1", tags=["SAST Dispatch (Agent)"])
 app.include_router(cloud_router,        prefix="/api/v1", tags=["Cloud Security & IaC (CSPM)"])
 app.include_router(containers_router,   prefix="/api/v1", tags=["Container Security (Trivy Image)"])
+app.include_router(schedules_router,    prefix="/api/v1", tags=["Pentests Contínuos (Scheduler)"])
+
+
+@app.on_event("startup")
+async def _startup_scheduler():
+    """Inicializa o APScheduler assim que o loop asyncio estiver rodando."""
+    sched_engine.init_scheduler(manager)
 
 
 class ScanRequest(BaseModel):

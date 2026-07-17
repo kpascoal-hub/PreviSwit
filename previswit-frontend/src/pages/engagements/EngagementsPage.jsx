@@ -28,7 +28,7 @@ import {
   Database, TrendingUp, CheckCircle, XCircle,
   Clock, Wifi, WifiOff, Trash2, Search,
   Zap, Eye, BarChart2, ExternalLink, RefreshCw,
-  Lock, Unlock, Settings,
+  Lock, Unlock, Settings, CalendarClock, X, PauseCircle, PlayCircle,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -93,6 +93,25 @@ const PIPELINES = [
     accentBorder: 'border-rose-500/25',
   },
 ];
+
+// ── Constantes de Agendamento ─────────────────────────────────────────────────
+
+const SCHEDULE_LS_KEY = 'previswit_schedules_v1';
+
+const FREQ_OPTIONS = [
+  { value: 'daily',   label: 'Diariamente',  cron: '0 3 * * *' },
+  { value: 'weekly',  label: 'Semanalmente', cron: '0 3 * * 1' },
+  { value: 'monthly', label: 'Mensalmente',  cron: '0 3 1 * *' },
+  { value: 'custom',  label: 'Customizado (Cron)', cron: '' },
+];
+
+function formatNextRun(freq) {
+  const now = new Date();
+  if (freq === 'daily')   { const d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(3,0,0,0); return d.toLocaleString('pt-BR'); }
+  if (freq === 'weekly')  { const d = new Date(now); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); d.setHours(3,0,0,0); return d.toLocaleString('pt-BR'); }
+  if (freq === 'monthly') { const d = new Date(now.getFullYear(), now.getMonth() + 1, 1, 3, 0, 0); return d.toLocaleString('pt-BR'); }
+  return '—';
+}
 
 // ── Finding Row ───────────────────────────────────────────────────────────────
 
@@ -273,6 +292,17 @@ export default function EngagementsPage() {
   const [sevFilter,   setSevFilter]   = useState('ALL');
   const [lastTarget,  setLastTarget]  = useState('');
 
+  // ── Pentests Contínuos ─────────────────────────────────────────────────
+  const _loadRoutines = () => { try { return JSON.parse(localStorage.getItem(SCHEDULE_LS_KEY) || '[]'); } catch { return []; } };
+  const [routines,      setRoutines]      = useState(_loadRoutines);
+  const [showSchedule,  setShowSchedule]  = useState(false);
+  const [schTarget,     setSchTarget]     = useState('');
+  const [schName,       setSchName]       = useState('');
+  const [schPipeline,   setSchPipeline]   = useState('p1');
+  const [schMode,       setSchMode]       = useState('safe');
+  const [schFreq,       setSchFreq]       = useState('daily');
+  const [schCron,       setSchCron]       = useState('');
+
   const wsRef      = useRef(null);
   const logsEndRef = useRef(null);
 
@@ -436,6 +466,50 @@ export default function EngagementsPage() {
     addLog('Cache de laudo removido.', 'system');
   };
 
+  // ── Handlers de Rotinas Agendadas ──────────────────────────────────────────
+
+  const _saveRoutines = (list) => {
+    localStorage.setItem(SCHEDULE_LS_KEY, JSON.stringify(list));
+    setRoutines(list);
+  };
+
+  const handleAddRoutine = (e) => {
+    e.preventDefault();
+    if (!schTarget.trim()) return;
+    const newRoutine = {
+      id:       crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
+      name:     schName.trim() || schTarget.trim(),
+      target:   schTarget.trim(),
+      pipeline: schPipeline,
+      mode:     schMode,
+      frequency: schFreq,
+      cron:     schFreq === 'custom' ? schCron : FREQ_OPTIONS.find(f => f.value === schFreq)?.cron || '0 3 * * *',
+      paused:   false,
+      next_run: formatNextRun(schFreq),
+      created_at: new Date().toISOString(),
+    };
+
+    // Persiste localmente (estrutura pronta para substituir por POST /api/v1/schedules/)
+    const updated = [...routines, newRoutine];
+    _saveRoutines(updated);
+
+    // Reset form
+    setSchTarget(''); setSchName(''); setSchPipeline('p1'); setSchMode('safe');
+    setSchFreq('daily'); setSchCron('');
+    setShowSchedule(false);
+    addLog(`⏱️ Rotina "${newRoutine.name}" agendada — ${newRoutine.frequency} · ${newRoutine.target}`, 'system');
+  };
+
+  const handleDeleteRoutine = (id) => {
+    _saveRoutines(routines.filter(r => r.id !== id));
+  };
+
+  const handlePauseRoutine = (id) => {
+    _saveRoutines(routines.map(r => r.id === id ? { ...r, paused: !r.paused } : r));
+  };
+
+
+
   // ── Computed ───────────────────────────────────────────────────────────────
 
   const isScanning  = status === 'scanning';
@@ -479,6 +553,13 @@ export default function EngagementsPage() {
               : <><span className="w-2 h-2 rounded-full bg-gray-600" /><span className="text-[10px] text-gray-500 font-semibold">Agente Offline</span></>
             }
           </div>
+          {/* Agendar Rotina */}
+          <button
+            onClick={() => setShowSchedule(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:border-purple-500/50 text-[11px] font-bold transition-all"
+          >
+            <CalendarClock className="w-3.5 h-3.5" /> Agendar Rotina
+          </button>
           {results && (
             <button
               onClick={handleClearCache}
@@ -490,6 +571,120 @@ export default function EngagementsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Modal: Agendar Nova Rotina ──────────────────────────────────── */}
+      {showSchedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-[#0d1421] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-gradient-to-r from-purple-500/10 to-transparent">
+              <div className="flex items-center gap-2.5">
+                <CalendarClock className="w-4.5 h-4.5 text-purple-400" />
+                <span className="text-sm font-bold text-white">⏱️ Agendar Nova Rotina de Pentest</span>
+              </div>
+              <button onClick={() => setShowSchedule(false)} className="text-gray-500 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddRoutine} className="p-6 flex flex-col gap-4">
+              {/* Nome */}
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Nome da Rotina</label>
+                <input
+                  type="text"
+                  value={schName}
+                  onChange={e => setSchName(e.target.value)}
+                  placeholder="Ex: API Banco — Pentest Semanal"
+                  className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/40 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                />
+              </div>
+
+              {/* Alvo */}
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Alvo (URL ou Repositório) <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  value={schTarget}
+                  onChange={e => setSchTarget(e.target.value)}
+                  placeholder="https://api.empresa.com"
+                  className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500/40 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                />
+              </div>
+
+              {/* Pipeline + Modo */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Nível de Teste</label>
+                  <select
+                    value={schPipeline}
+                    onChange={e => setSchPipeline(e.target.value)}
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/40 transition-all"
+                  >
+                    {PIPELINES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Modo de Engajamento</label>
+                  <div className="flex gap-2 h-[42px]">
+                    <button type="button" onClick={() => setSchMode('safe')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border text-[11px] font-bold transition-all
+                        ${schMode === 'safe' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-white/[0.03] border-white/[0.08] text-gray-500 hover:text-gray-300'}`}>
+                      <Shield className="w-3 h-3" /> Carga Seca
+                    </button>
+                    <button type="button" onClick={() => setSchMode('hot')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border text-[11px] font-bold transition-all
+                        ${schMode === 'hot' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' : 'bg-white/[0.03] border-white/[0.08] text-gray-500 hover:text-gray-300'}`}>
+                      <Flame className="w-3 h-3" /> Gêmeo Efêmero
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Frequência */}
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Frequência</label>
+                <select
+                  value={schFreq}
+                  onChange={e => setSchFreq(e.target.value)}
+                  className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/40 transition-all"
+                >
+                  {FREQ_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} {f.cron ? `(${f.cron})` : ''}</option>)}
+                </select>
+              </div>
+
+              {/* Cron customizado */}
+              {schFreq === 'custom' && (
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 block">Expressão Cron</label>
+                  <input
+                    type="text"
+                    value={schCron}
+                    onChange={e => setSchCron(e.target.value)}
+                    placeholder="Ex: 0 6 * * 1-5"
+                    className="w-full bg-[#111827] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm font-mono text-amber-400 placeholder:text-gray-600 focus:outline-none focus:border-amber-500/40 transition-all"
+                  />
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowSchedule(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-white/[0.08] text-gray-400 text-sm font-bold hover:bg-white/[0.04] transition-all">
+                  Cancelar
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold transition-all shadow-lg shadow-purple-500/20">
+                  ⏱️ Criar Rotina
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
 
       {/* ── Error Banner ───────────────────────────────────────────────── */}
       {status === 'error' && errorMsg && (
@@ -736,6 +931,104 @@ export default function EngagementsPage() {
         </div>
       )}
 
+      {/* ── Pentests Contínuos — Lista de Rotinas ────────────────────────── */}
+      <div className="flex flex-col rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/80 to-[#060b13]/60 overflow-hidden">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.05] bg-[#030710]/60">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-purple-400" />
+            <span className="text-sm font-bold text-white">Rotinas Agendadas</span>
+            {routines.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/25 text-[10px] text-purple-400 font-bold">
+                {routines.length}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setShowSchedule(true)}
+            className="flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300 font-semibold transition-colors"
+          >
+            + Nova Rotina
+          </button>
+        </div>
+
+        {routines.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+              <CalendarClock className="w-4 h-4 text-purple-400/50" />
+            </div>
+            <p className="text-xs text-gray-600 text-center">
+              Nenhuma rotina agendada. Crie a primeira clicando em <span className="text-purple-400">"Agendar Rotina"</span>.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Column headers */}
+            <div className="grid grid-cols-12 gap-2 px-5 py-2 text-[9px] text-gray-500 uppercase tracking-wider font-bold border-b border-white/[0.04] bg-white/[0.015]">
+              <div className="col-span-3">Nome / Alvo</div>
+              <div className="col-span-2">Frequência</div>
+              <div className="col-span-3">Próxima Execução</div>
+              <div className="col-span-2">Nível</div>
+              <div className="col-span-1">Modo</div>
+              <div className="col-span-1 text-right">Ações</div>
+            </div>
+
+            {routines.map(r => {
+              const pip = PIPELINES.find(p => p.id === r.pipeline);
+              return (
+                <div key={r.id} className={`grid grid-cols-12 gap-2 items-center px-5 py-3 border-b border-white/[0.03] last:border-0 transition-all hover:bg-white/[0.02] ${r.paused ? 'opacity-50' : ''}`}>
+                  {/* Nome/Alvo */}
+                  <div className="col-span-3 min-w-0">
+                    <p className="text-xs font-semibold text-gray-200 truncate">{r.name}</p>
+                    <p className="text-[10px] text-gray-600 font-mono truncate">{r.target}</p>
+                  </div>
+                  {/* Frequência */}
+                  <div className="col-span-2">
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 font-bold capitalize">
+                      {r.frequency === 'daily' ? 'Diária' : r.frequency === 'weekly' ? 'Semanal' : r.frequency === 'monthly' ? 'Mensal' : r.frequency}
+                    </span>
+                  </div>
+                  {/* Próxima execução */}
+                  <div className="col-span-3">
+                    <p className="text-[10px] text-gray-400 font-mono">{r.next_run || '—'}</p>
+                    {r.paused && <p className="text-[9px] text-amber-500 font-bold mt-0.5">PAUSADA</p>}
+                  </div>
+                  {/* Nível */}
+                  <div className="col-span-2">
+                    <p className={`text-[10px] font-bold ${pip?.color || 'text-gray-400'}`}>{pip?.label || r.pipeline}</p>
+                  </div>
+                  {/* Modo */}
+                  <div className="col-span-1">
+                    {r.mode === 'hot'
+                      ? <span className="flex items-center gap-1 text-[10px] text-rose-400 font-bold"><Flame className="w-3 h-3" />HOT</span>
+                      : <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold"><Shield className="w-3 h-3" />SAFE</span>
+                    }
+                  </div>
+                  {/* Ações */}
+                  <div className="col-span-1 flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => handlePauseRoutine(r.id)}
+                      title={r.paused ? 'Retomar' : 'Pausar'}
+                      className="p-1 rounded-lg text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
+                    >
+                      {r.paused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRoutine(r.id)}
+                      title="Deletar rotina"
+                      className="p-1 rounded-lg text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+
     </div>
+
   );
 }

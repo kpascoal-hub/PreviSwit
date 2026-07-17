@@ -35,3 +35,6 @@ websockets>=12.0
 
 # Pipeline 6 — Gemini Overwatch
 google-genai>=1.0.0
+
+# Scheduler — Pentests Contínuos
+apscheduler>=3.10.0
