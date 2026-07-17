@@ -16,7 +16,7 @@ import {
   BrainCircuit, ShieldAlert, Code2, Copy, Check,
   ChevronDown, Send, Bot, User, AlertTriangle,
   DollarSign, FileText, TrendingUp, Sparkles,
-  Loader2, ChevronRight,
+  Loader2, ChevronRight, Trash2,
 } from 'lucide-react';
 
 // ── Coleta de vulns do localStorage (mesma lógica do FindingsPage) ─────────────
@@ -401,7 +401,6 @@ export default function AiInsightsPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  // Quando seleciona vuln, dispara mensagem de análise automática no chat
   const handleSelectVuln = (id) => {
     setSelectedId(id);
     const vuln = vulns.find(v => v.id === id);
@@ -412,6 +411,14 @@ export default function AiInsightsPage() {
       { id: Date.now(), role: 'ai', time,
         content: `Carregando análise de Threat Intel para: "${vuln.title}" (${vuln.severity} · ${vuln.source}). Verifique os cards ao lado para impacto financeiro, normas afetadas e o patch de remediação automático.` }
     ]);
+  };
+
+  const handleClearChat = () => {
+    setMessages([{
+      id: 0, role: 'ai',
+      content: 'Olá! Sou o Copiloto de Segurança do PreviSwit. Selecione uma vulnerabilidade na coluna ao lado para análise contextualizada, ou me faça qualquer pergunta sobre o risco da sua aplicação.',
+      time: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
+    }]);
   };
 
   return (
@@ -546,9 +553,18 @@ export default function AiInsightsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/15">
-              <Sparkles className="w-3 h-3 text-purple-400" />
-              <span className="text-[10px] text-purple-400 font-bold">Pro</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/15">
+                <Sparkles className="w-3 h-3 text-purple-400" />
+                <span className="text-[10px] text-purple-400 font-bold">Pro</span>
+              </div>
+              <button
+                onClick={handleClearChat}
+                title="Limpar Conversa"
+                className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
