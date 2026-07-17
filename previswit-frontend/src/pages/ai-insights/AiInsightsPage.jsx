@@ -364,10 +364,9 @@ export default function AiInsightsPage() {
           'X-Gemini-Key': geminiKey
         },
         body: JSON.stringify({
-          session_id: 'global_insights_copilot',
-          prompt: text,
-          prompt_type: 'chat',
-          context: contextText
+          message: text,
+          context_findings: selected ? [selected] : [],
+          history: messages.map(m => ({ role: m.role, content: m.content }))
         })
       });
 
