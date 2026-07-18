@@ -91,6 +91,22 @@ function RepositoryCard({ repo, openRiskGraph }) {
     setTimeout(() => setToast(null), 3500);
   };
 
+  // ── 1. Hidratação de Estado (Cache de Interface) ──────────────────────────
+  // Previne a perda visual do resultado ao trocar de abas
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('previswit_sast_current_view');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Só hidrata se o cache pertencer a este repositório
+        if (parsed.target === repo.name) {
+          setScanData(parsed.data);
+          setScanStatus('CONCLUÍDO');
+        }
+      }
+    } catch (e) {}
+  }, [repo.name]);
+
   // Hook Polling: Verifica o status do scan no backend
   useEffect(() => {
     let interval;
@@ -103,7 +119,14 @@ function RepositoryCard({ repo, openRiskGraph }) {
             setScanStatus(data.status);
             if (data.status === 'CONCLUÍDO') {
               setScanData(data.data);
-              // Gravação na Memória do Navegador para persistência em F5 / troca de abas
+              
+              // ── 2. Salva a cópia do view state atual no cache do navegador
+              localStorage.setItem('previswit_sast_current_view', JSON.stringify({
+                target: repo.name,
+                data: data.data
+              }));
+              
+              // Gravação original na Memória do Navegador
               localStorage.setItem('previswit_scan_' + repo.name, JSON.stringify(data.data));
               
               // A Propagação Ativa (Cascade Hydration) para os Commits
@@ -155,6 +178,9 @@ function RepositoryCard({ repo, openRiskGraph }) {
   const handleStartScan = async () => {
     setShowScheduleModal(false);
     setScanStatus('PENDING');
+    
+    // ── 3. Tratamento de Novo Alvo: limpa o cache antigo da interface
+    localStorage.removeItem('previswit_sast_current_view');
     
     // Cálculo do tempo sob demanda em minutos
     let intervalMinutes = 0;
