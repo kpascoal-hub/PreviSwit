@@ -19,51 +19,6 @@ import {
   Loader2, ChevronRight, Trash2,
 } from 'lucide-react';
 
-// ── Coleta de vulns do localStorage (mesma lógica do FindingsPage) ─────────────
-
-const LS_PREFIXES = [
-  { prefix: 'previswit_scan_',      source: 'SAST' },
-  { prefix: 'previswit_iac_',       source: 'Cloud/IaC' },
-  { prefix: 'previswit_container_', source: 'Container' },
-  { prefix: 'previswit_pentest_',   source: 'DAST' },
-  { prefix: 'previswit_dast_',      source: 'DAST' },
-];
-
-function normSev(raw) {
-  const s = (raw || '').toUpperCase();
-  if (s === 'CRITICAL' || s === 'CRÍTICO') return 'CRITICAL';
-  if (s === 'HIGH'     || s === 'ALTO')    return 'HIGH';
-  if (s === 'MEDIUM'   || s === 'MÉDIO')   return 'MEDIUM';
-  return 'LOW';
-}
-
-function collectVulns() {
-  const out = [];
-  const allKeys = Object.keys(localStorage);
-  LS_PREFIXES.forEach(({ prefix, source }) => {
-    allKeys.filter(k => k.startsWith(prefix)).forEach(k => {
-      try {
-        const data = JSON.parse(localStorage.getItem(k) || '{}');
-        const arr  = data.findings_prioritized || data.findings || data.vulnerabilities || data.results || [];
-        if (!Array.isArray(arr)) return;
-        arr.forEach(f => {
-          const title = f.vulnerability || f.title || f.name || f.check_id || f.description || '—';
-          out.push({
-            id:          `${k}::${title}`,
-            title,
-            severity:    normSev(f.severity || f.risk || ''),
-            source,
-            target:      k.replace(prefix, '').replace(/_/g, ' '),
-            description: f.description || f.detail || f.message || '',
-            cve:         f.cve || '',
-            endpoint:    f.endpoint || f.url || f.path || '',
-          });
-        });
-      } catch (_) {}
-    });
-  });
-  return out;
-}
 
 // ── Severidade helpers ─────────────────────────────────────────────────────────
 
@@ -321,11 +276,27 @@ export default function AiInsightsPage() {
   const messagesEndRef = useRef(null);
   const inputRef       = useRef(null);
 
-  // Coleta vulns do localStorage na montagem
+  // Coleta vulns da API na montagem
   useEffect(() => {
-    const list = collectVulns();
-    setVulns(list);
-    if (list.length > 0) setSelectedId(list[0].id);
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/findings/?page_size=500');
+        if (!res.ok) return;
+        const json = await res.json();
+        const list = (json.findings || []).map(f => ({
+          id:          f.id,
+          title:       f.title || '—',
+          severity:    f.severity || 'LOW',
+          source:      f.tags?.[0] || f.tool || 'Agent',
+          target:      f.asset_id || f.endpoint || '—',
+          description: f.description || '',
+          cve:         f.cve_id || '',
+          endpoint:    f.endpoint || '',
+        }));
+        setVulns(list);
+        if (list.length > 0) setSelectedId(list[0].id);
+      } catch (_) {}
+    })();
   }, []);
 
   // Auto-scroll do chat

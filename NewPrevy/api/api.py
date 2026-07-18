@@ -143,6 +143,67 @@ manager = ConnectionManager()
 _agent_capabilities: dict = {}
 
 
+# ─── Ingestão Automática de Findings ─────────────────────────────────────────
+import logging as _log
+_ingest_logger = _log.getLogger("previswit.ingest")
+
+
+def _extract_findings_from_payload(data: dict) -> list:
+    """
+    Extrai o array de vulnerabilidades de qualquer formato de payload do agente.
+    Suporta os formatos SAST, IaC (Checkov), Container (Trivy), DAST.
+    """
+    candidates = (
+        data.get("findings_prioritized")
+        or data.get("findings")
+        or data.get("vulnerabilities")
+        or data.get("results")
+        or []
+    )
+
+    # Formato do laudo completo aninhado em "report"
+    if not candidates and isinstance(data.get("report"), dict):
+        candidates = _extract_findings_from_payload(data["report"])
+
+    # Trivy wraps em Results[].Vulnerabilities[]
+    if not candidates and isinstance(data.get("Results"), list):
+        for r in data["Results"]:
+            for v in r.get("Vulnerabilities", []):
+                v["tool"] = "Trivy"
+                candidates.append(v)
+            for m in r.get("Misconfigurations", []):
+                m["tool"] = "Trivy"
+                candidates.append(m)
+
+    return candidates if isinstance(candidates, list) else []
+
+
+def _ingest_scan_results(data: dict, source: str = "agent", target: str = ""):
+    """
+    Extrai findings do payload e persiste via /findings/bulk (call interna).
+    """
+    import httpx, asyncio
+
+    findings_raw = _extract_findings_from_payload(data)
+    if not findings_raw:
+        return
+
+    try:
+        # Chamada síncrona interna — evita criar dependência circular via import
+        from api.routers.findings import bulk_ingest_findings
+        result = bulk_ingest_findings({
+            "findings": findings_raw,
+            "source": source,
+            "target": target or data.get("target", ""),
+        })
+        _ingest_logger.info(
+            "✅ Ingestão automática: %d inseridos, %d já existentes (source=%s, target=%s)",
+            result.get("inserted", 0), result.get("skipped", 0), source, target
+        )
+    except Exception as e:
+        _ingest_logger.error("❌ Falha na ingestão automática: %s", e)
+
+
 @app.get("/", response_class=HTMLResponse)
 def root():
     path = os.path.join(os.path.dirname(__file__), "..", "templates", "login.html")
@@ -257,9 +318,32 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
                         len(_agent_capabilities.get("api_integrations", [])),
                     )
 
+                # ── Auto-ingestão de findings no banco de dados ──────────────
+                action = data.get("action", "")
+                # Ingerir em qualquer mensagem que contenha resultados de scan
+                _INGEST_TRIGGERS = {
+                    "SCAN_COMPLETE", "SCAN_RESULT", "REPORT_READY",
+                    "SAST_COMPLETE", "DAST_COMPLETE", "IAC_COMPLETE",
+                    "CONTAINER_SCAN_COMPLETE",
+                }
+                payload = data.get("data", data)  # suporta payload aninhado em "data"
+                if action in _INGEST_TRIGGERS or _extract_findings_from_payload(payload):
+                    source_map = {
+                        "SAST_COMPLETE": "SAST",
+                        "IAC_COMPLETE": "Cloud/IaC",
+                        "CONTAINER_SCAN_COMPLETE": "Container",
+                        "DAST_COMPLETE": "DAST",
+                    }
+                    _ingest_scan_results(
+                        payload,
+                        source=source_map.get(action, action or "agent"),
+                        target=data.get("target", ""),
+                    )
+
                 # Tudo que o agente falar, repassa pro Dashboard
                 await manager.send_to_dashboard(data)
             except json.JSONDecodeError:
                 pass
+
     except WebSocketDisconnect:
         manager.disconnect_agent(agent_id)

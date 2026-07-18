@@ -18,50 +18,6 @@ import {
   AlertTriangle, Shield, TrendingUp, TrendingDown, ChevronRight
 } from 'lucide-react';
 
-// ── Coleta de vulns do localStorage ─────────────────────────────────────────────
-
-const LS_PREFIXES = [
-  'previswit_scan_',
-  'previswit_iac_',
-  'previswit_container_',
-  'previswit_pentest_',
-  'previswit_dast_',
-];
-
-function normSev(raw) {
-  const s = (raw || '').toUpperCase();
-  if (s === 'CRITICAL' || s === 'CRÍTICO') return 'CRITICAL';
-  if (s === 'HIGH'     || s === 'ALTO')    return 'HIGH';
-  if (s === 'MEDIUM'   || s === 'MÉDIO')   return 'MEDIUM';
-  return 'LOW';
-}
-
-function collectAllFindings() {
-  const allFindings = [];
-  const allKeys = Object.keys(localStorage);
-
-  LS_PREFIXES.forEach(prefix => {
-    allKeys.filter(k => k.startsWith(prefix)).forEach(k => {
-      try {
-        const data = JSON.parse(localStorage.getItem(k) || '{}');
-        const arr = data.findings_prioritized || data.findings || data.vulnerabilities || data.results || [];
-        if (Array.isArray(arr)) {
-          arr.forEach(f => {
-            const title = f.vulnerability || f.title || f.name || f.check_id || f.description || '—';
-            allFindings.push({
-              title,
-              severity: normSev(f.severity || f.risk || ''),
-              description: f.description || f.detail || f.message || '',
-            });
-          });
-        }
-      } catch (_) {}
-    });
-  });
-
-  return allFindings;
-}
-
 // ── Funções de Cálculo ────────────────────────────────────────────────────────
 
 function calculateScore(findings) {
@@ -103,57 +59,69 @@ const CustomTooltip = ({ active, payload, label }) => {
 // ── Componente Principal ──────────────────────────────────────────────────────
 
 export default function RiskPage() {
-  const [findings, setFindings] = useState([]);
+  const [counts,       setCounts]       = useState({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
   const [currentScore, setCurrentScore] = useState(100);
-  const [history, setHistory] = useState([]);
+  const [history,      setHistory]      = useState([]);
+  const [findings,     setFindings]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
 
-  // Hidratação
+  // Hidratação via API
   useEffect(() => {
-    const all = collectAllFindings();
-    setFindings(all);
+    (async () => {
+      try {
+        // Busca summary (contagens por severidade)
+        const sumRes = await fetch('/api/v1/findings/stats/summary');
+        if (sumRes.ok) {
+          const summary = await sumRes.json();
+          const c = {
+            CRITICAL: summary.by_severity?.CRITICAL || 0,
+            HIGH:     summary.by_severity?.HIGH     || 0,
+            MEDIUM:   summary.by_severity?.MEDIUM   || 0,
+            LOW:      summary.by_severity?.LOW      || 0,
+          };
+          setCounts(c);
 
-    const score = calculateScore(all);
-    setCurrentScore(score);
+          // Calcula score com base nos contadores
+          const score = Math.max(0, 100 - (c.CRITICAL * 15) - (c.HIGH * 5) - (c.MEDIUM * 2));
+          setCurrentScore(score);
 
-    // Histórico Evolutivo
-    const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    let hist = [];
-    try {
-      hist = JSON.parse(localStorage.getItem('previswit_score_history') || '[]');
-    } catch (_) {}
+          // Busca lista completa para compliance parser
+          const listRes = await fetch('/api/v1/findings/?page_size=500');
+          if (listRes.ok) {
+            const listJson = await listRes.json();
+            setFindings(listJson.findings || []);
+          }
 
-    // Mock dados iniciais se vazio para visualização executiva
-    if (hist.length === 0) {
-      hist = [
-        { date: '12/07', score: Math.max(0, score - 15) },
-        { date: '13/07', score: Math.max(0, score - 12) },
-        { date: '14/07', score: Math.max(0, score - 10) },
-        { date: '15/07', score: Math.max(0, score - 5) },
-        { date: '16/07', score: Math.max(0, score - 2) },
-      ];
-    }
+          // Histórico Evolutivo (mantido no localStorage por ser dado local temporal)
+          const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+          let hist = [];
+          try { hist = JSON.parse(localStorage.getItem('previswit_score_history') || '[]'); } catch (_) {}
 
-    const todayIdx = hist.findIndex(h => h.date === today);
-    if (todayIdx >= 0) {
-      hist[todayIdx].score = score;
-    } else {
-      hist.push({ date: today, score });
-    }
-
-    // Mantém últimos 30 dias
-    if (hist.length > 30) hist = hist.slice(hist.length - 30);
-
-    localStorage.setItem('previswit_score_history', JSON.stringify(hist));
-    setHistory(hist);
+          if (hist.length === 0) {
+            hist = [
+              { date: '12/07', score: Math.max(0, score - 15) },
+              { date: '13/07', score: Math.max(0, score - 12) },
+              { date: '14/07', score: Math.max(0, score - 10) },
+              { date: '15/07', score: Math.max(0, score - 5)  },
+              { date: '16/07', score: Math.max(0, score - 2)  },
+            ];
+          }
+          const todayIdx = hist.findIndex(h => h.date === today);
+          if (todayIdx >= 0) hist[todayIdx].score = score;
+          else hist.push({ date: today, score });
+          if (hist.length > 30) hist = hist.slice(-30);
+          localStorage.setItem('previswit_score_history', JSON.stringify(hist));
+          setHistory(hist);
+        }
+      } catch (e) {
+        console.error('[RiskPage] Erro ao carregar API:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   // ── Cálculos Derivados ──────────────────────────────────────────────────
-
-  const counts = useMemo(() => {
-    const c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-    findings.forEach(f => { if (c[f.severity] !== undefined) c[f.severity]++; });
-    return c;
-  }, [findings]);
 
   const financialExposure = counts.CRITICAL * 50000;
   const gradeData = getScoreGrade(currentScore);

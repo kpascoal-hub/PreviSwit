@@ -182,6 +182,89 @@ def update_finding_status(finding_id: str, body: dict):
     raise HTTPException(status_code=404, detail="Finding não encontrado")
 
 
+@router.post("/bulk", status_code=status.HTTP_200_OK, summary="Ingestão em lote de findings (deduplication automática)")
+def bulk_ingest_findings(body: dict):
+    """
+    Recebe um array de findings normalizados de um scan completo e os insere
+    no banco de dados, evitando duplicatas por título+CVE.
+    Usado pelo WebSocket do agente quando SCAN_COMPLETE é recebido.
+    """
+    items: list = body.get("findings", [])
+    source: str = body.get("source", "unknown")
+    target: str = body.get("target", "")
+
+    if not items:
+        return {"inserted": 0, "skipped": 0, "message": "Nenhum finding fornecido."}
+
+    findings = _load()
+
+    # Constrói índice de deduplicação: CVE ou título normalizado
+    def _dedup_key(f):
+        cve = (f.get("cve_id") or f.get("cve") or "").strip().upper()
+        if cve:
+            return f"cve:{cve}"
+        title = (f.get("title") or "").lower().strip()
+        return f"title:{title}"
+
+    existing_keys = {_dedup_key(f) for f in findings}
+
+    SEV_MAP = {
+        "critical": "CRITICAL", "crítico": "CRITICAL",
+        "high": "HIGH",         "alto": "HIGH",     "error": "HIGH",
+        "medium": "MEDIUM",     "médio": "MEDIUM",  "warn": "MEDIUM",
+        "low": "LOW",           "baixo": "LOW",     "info": "INFO",
+    }
+
+    inserted = 0
+    skipped  = 0
+
+    for raw in items:
+        raw_title = (
+            raw.get("vulnerability") or raw.get("title") or
+            raw.get("name") or raw.get("check_id") or
+            raw.get("description") or "Untitled Finding"
+        )
+        raw_sev = (
+            raw.get("severity") or raw.get("risk") or raw.get("level") or "LOW"
+        ).lower().strip()
+
+        normalized = {
+            "id":          str(uuid.uuid4()),
+            "title":       raw_title,
+            "description": raw.get("description") or raw.get("detail") or raw.get("message") or "",
+            "severity":    SEV_MAP.get(raw_sev, "LOW"),
+            "status":      "open",
+            "tool":        raw.get("tool") or raw.get("scanner") or source,
+            "asset_id":    target or raw.get("asset_id"),
+            "cve_id":      raw.get("cve") or raw.get("cve_id") or raw.get("CVE"),
+            "cvss_score":  raw.get("cvss_score"),
+            "endpoint":    raw.get("endpoint") or raw.get("url") or raw.get("path") or raw.get("file_path"),
+            "payload":     raw.get("payload") or raw.get("ai_payload") or raw.get("evidence"),
+            "raw_output":  raw.get("raw_output") or str(raw)[:500],
+            "tags":        [source] if source else [],
+            "is_duplicate":      False,
+            "false_positive":    False,
+            "ai_remediation":    None,
+            "created_at":        datetime.utcnow().isoformat(),
+            "updated_at":        datetime.utcnow().isoformat(),
+        }
+
+        key = _dedup_key(normalized)
+        if key in existing_keys:
+            skipped += 1
+            continue
+
+        existing_keys.add(key)
+        findings.append(normalized)
+        inserted += 1
+
+    if inserted > 0:
+        _save(findings)
+
+    return {"inserted": inserted, "skipped": skipped, "total_after": len(findings)}
+
+
+
 @router.get("/triage/queue", summary="Fila de triagem por IA")
 def get_triage_queue():
     """Retorna findings abertos ordenados por prioridade para triagem."""

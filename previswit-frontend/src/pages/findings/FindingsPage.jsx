@@ -151,26 +151,40 @@ function deduplicateFindings(all) {
   });
 }
 
-// ── Coleta global do localStorage ─────────────────────────────────────────────
+// ── Source labels usados nos filtros ──────────────────────────────────────────
 
-function collectAllFindings() {
-  const raw = [];
-  const allKeys = Object.keys(localStorage);
+const ALL_SOURCES = ['SAST', 'Cloud', 'Container', 'DAST'];
 
-  LS_PREFIXES.forEach(({ prefix, source }) => {
-    allKeys
-      .filter(k => k.startsWith(prefix))
-      .forEach(k => {
-        try {
-          const data = JSON.parse(localStorage.getItem(k) || '{}');
-          const target = k.replace(prefix, '').replace(/_/g, ' ') || k;
-          const items = extractFindings(data, source, target);
-          raw.push(...items);
-        } catch (_) {}
-      });
-  });
+// ── Converte finding da API para formato interno do FindingRow ────────────────
 
-  return raw;
+function apiToRow(f) {
+  const source =
+    f.tags?.[0] || (f.tool || '').toUpperCase().includes('TRIVY')
+      ? 'Container'
+      : (f.tool || '').toUpperCase().includes('CHECKOV')
+      ? 'Cloud'
+      : (f.tool || '').toUpperCase().includes('SEMGREP') ||
+        (f.tool || '').toUpperCase().includes('GITLEAKS')
+      ? 'Code'
+      : 'DAST';
+
+  return {
+    key:         f.id,
+    title:       f.title || '—',
+    cve:         f.cve_id || '',
+    severity:    f.severity || 'LOW',
+    occurrences: 1,
+    targets:     [f.asset_id || f.endpoint || '—'],
+    scanners:    [f.tool || source],
+    sources:     [source],
+    details:     f.description ? [f.description] : [],
+    remediation: f.ai_remediation || '',
+    reference:   '',
+    endpoint:    f.endpoint || '',
+    payload:     f.payload || '',
+    proof:       f.status || 'open',
+    raw:         f,
+  };
 }
 
 // ── Componente: linha expandível ─────────────────────────────────────────────
@@ -313,13 +327,27 @@ export default function FindingsPage() {
   const [sevFilter,    setSevFilter]    = useState('ALL');
   const [sourceFilter, setSourceFilter] = useState('ALL');
   const [lastRefresh,  setLastRefresh]  = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
 
-  // ── Coleta + deduplicação ─────────────────────────────────────────────────
+  // ── Fetch da API ──────────────────────────────────────────────────────────
 
-  const hydrate = useCallback(() => {
-    const raw = collectAllFindings();
-    setAllRaw(raw);
-    setLastRefresh(new Date().toLocaleTimeString('pt-BR', { hour12: false }));
+  const hydrate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/findings/?page_size=500');
+      if (!res.ok) throw new Error(`API retornou ${res.status}`);
+      const json = await res.json();
+      const rows = (json.findings || []).map(apiToRow);
+      // Roda deduplication sobre os findings da API (pode haver duplicatas de scans diferentes)
+      setAllRaw(rows);
+      setLastRefresh(new Date().toLocaleTimeString('pt-BR', { hour12: false }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { hydrate(); }, [hydrate]);
@@ -374,12 +402,21 @@ export default function FindingsPage() {
           )}
           <button
             onClick={hydrate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] text-gray-400 hover:text-white hover:bg-white/[0.06] text-[11px] font-bold transition-all"
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] text-gray-400 hover:text-white hover:bg-white/[0.06] text-[11px] font-bold transition-all disabled:opacity-40"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Reanalisar
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Reanalisar
           </button>
         </div>
       </div>
+
+      {/* ── Error State ──────────────────────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs text-rose-400">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Erro ao carregar findings da API: {error}</span>
+        </div>
+      )}
 
       {/* ── KPI Cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -469,7 +506,12 @@ export default function FindingsPage() {
 
         {/* Rows */}
         <div className="max-h-[600px] overflow-y-auto">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-20 gap-3">
+              <Cpu className="w-5 h-5 text-blue-400 animate-pulse" />
+              <p className="text-sm text-gray-500">Carregando findings do servidor...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               {allRaw.length === 0 ? (
                 <>
@@ -507,20 +549,9 @@ export default function FindingsPage() {
         {filtered.length > 0 && (
           <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/[0.04] bg-[#030710]/40">
             <p className="text-[10px] text-gray-600">
-              {allRaw.length} vulnerabilidades brutas → {deduped.length} únicas após deduplicação
+              {allRaw.length} vulnerabilidades na base → {deduped.length} únicas após deduplicação
             </p>
-            <div className="flex items-center gap-3">
-              {LS_PREFIXES.filter(p =>
-                Object.keys(localStorage).some(k => k.startsWith(p.prefix))
-              ).map(p => {
-                const sc = SOURCE_COLORS[p.source] || {};
-                return (
-                  <span key={p.prefix} className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${sc.bg} ${sc.text} ${sc.border}`}>
-                    {p.label}
-                  </span>
-                );
-              })}
-            </div>
+            <p className="text-[10px] text-gray-600 font-mono">Fonte: API Backend (data/findings.json)</p>
           </div>
         )}
       </div>
