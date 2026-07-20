@@ -16,6 +16,45 @@ from datetime import datetime
 
 router = APIRouter(prefix="/assets", tags=["Assets & Products"])
 
+# ── Metadados por categoria (usados em /summary e /category) ─────────────────
+CATEGORY_META = {
+    "REPOSITORY": {
+        "label":    "Repositórios",
+        "hint":     "GitHub · GitLab · Bitbucket",
+        "icon":     "git-branch",
+        "color":    "purple",
+        "extra_fields": ["provider", "repo_url", "default_branch", "visibility", "language"],
+    },
+    "CLOUD": {
+        "label":    "Cloud",
+        "hint":     "AWS · Azure · GCP",
+        "icon":     "cloud",
+        "color":    "sky",
+        "extra_fields": ["provider", "region", "account_id", "service_type", "arn"],
+    },
+    "CONTAINER": {
+        "label":    "Contêineres",
+        "hint":     "Imagens Docker · Kubernetes",
+        "icon":     "box",
+        "color":    "cyan",
+        "extra_fields": ["image_name", "registry", "tag", "digest", "base_os"],
+    },
+    "VM": {
+        "label":    "Máquinas Virtuais",
+        "hint":     "VMs · Instâncias · Bare Metal",
+        "icon":     "monitor",
+        "color":    "amber",
+        "extra_fields": ["host", "ip_address", "os", "provider", "instance_type"],
+    },
+    "DOMAIN": {
+        "label":    "Domínios & APIs",
+        "hint":     "Endpoints expostos · APIs públicas",
+        "icon":     "globe",
+        "color":    "emerald",
+        "extra_fields": ["host", "url", "protocol", "port", "api_type"],
+    },
+}
+
 FINDINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "findings.json")
 
 def _aggregate_assets_from_findings() -> List[dict]:
