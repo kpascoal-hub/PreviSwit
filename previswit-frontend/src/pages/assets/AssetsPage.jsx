@@ -31,6 +31,14 @@ const TYPE_TO_PATH = {
   DOMAIN: '/assets/domains',
 };
 
+const CATEGORY_META = {
+  REPOSITORY: { label: 'Repositório', icon: 'git-branch', color: 'purple' },
+  CLOUD:      { label: 'Cloud', icon: 'cloud', color: 'sky' },
+  CONTAINER:  { label: 'Contêiner', icon: 'box', color: 'cyan' },
+  VM:         { label: 'Máquina Virtual', icon: 'monitor', color: 'amber' },
+  DOMAIN:     { label: 'Web/API', icon: 'globe', color: 'emerald' },
+};
+
 // ── Categoria cards para o resumo ─────────────────────────────────────────────
 const CATEGORY_CARDS = [
   {
@@ -244,33 +252,63 @@ export default function AssetsPage() {
             </div>
           )}
           {!loading && !error && assets.length > 0 && (
-            <div className="space-y-1">
-              {assets.map((a, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between py-3 px-3 border border-transparent hover:border-white/5 hover:bg-white/2 rounded-lg transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 shrink-0" />
-                    <div>
-                      <p className="text-sm text-white font-medium">{a.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {a.asset_type || 'N/A'}{a.host ? ` · ${a.host}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full border ${a.criticality === 'CRITICAL'
-                        ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                        : a.criticality === 'HIGH'
-                          ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                          : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                      }`}
-                  >
-                    {a.criticality || 'N/A'}
-                  </span>
-                </div>
-              ))}
+            <div className="overflow-x-auto pb-4">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/5 bg-[#111827]/60">
+                    <th className="py-4 px-5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Nome do Ativo/Produto</th>
+                    <th className="py-4 px-5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tipo de Ativo</th>
+                    <th className="py-4 px-5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Vulnerabilidades Ativas</th>
+                    <th className="py-4 px-5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Última Verificação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {assets.map((a, i) => {
+                    const meta = CATEGORY_META[a.asset_type] || CATEGORY_META.DOMAIN;
+                    const cColor = COLOR_MAP[meta.color] || COLOR_MAP.purple;
+                    const icon = ICON_MAP[meta.icon] || <Globe className="w-4 h-4" />;
+
+                    return (
+                      <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="py-3.5 px-5">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg border ${cColor.bg} ${cColor.border} shrink-0`}>
+                              <span className={cColor.text}>{icon}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">{a.name}</p>
+                              {a.host && <p className="text-[10px] text-gray-500 mt-0.5">{a.host}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <span className="text-[11px] font-medium text-gray-300 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
+                            {meta.label || a.asset_type || 'Desconhecido'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-black text-white">{a.total_vulnerabilities || 0}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border tracking-wide uppercase ${
+                              a.criticality === 'CRITICAL' ? 'bg-rose-500/10 text-rose-400 border-rose-500/25' :
+                              a.criticality === 'HIGH' ? 'bg-orange-500/10 text-orange-400 border-orange-500/25' :
+                              a.criticality === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400 border-amber-500/25' :
+                              'bg-blue-500/10 text-blue-400 border-blue-500/25'
+                            }`}>
+                              Risco {a.criticality || 'LOW'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <p className="text-xs text-gray-500 font-medium">
+                            {a.last_seen ? new Date(a.last_seen).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          </p>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

@@ -16,66 +16,84 @@ from datetime import datetime
 
 router = APIRouter(prefix="/assets", tags=["Assets & Products"])
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "assets.json")
+FINDINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "findings.json")
 
-# ── Tipos de ativo válidos ────────────────────────────────────────────────────
-VALID_TYPES = {"REPOSITORY", "CLOUD", "CONTAINER", "VM", "DOMAIN"}
-
-# ── Metadados por categoria (usados em /summary e /category) ─────────────────
-CATEGORY_META = {
-    "REPOSITORY": {
-        "label":    "Repositórios",
-        "hint":     "GitHub · GitLab · Bitbucket",
-        "icon":     "git-branch",
-        "color":    "purple",
-        "extra_fields": ["provider", "repo_url", "default_branch", "visibility", "language"],
-    },
-    "CLOUD": {
-        "label":    "Cloud",
-        "hint":     "AWS · Azure · GCP",
-        "icon":     "cloud",
-        "color":    "sky",
-        "extra_fields": ["provider", "region", "account_id", "service_type", "arn"],
-    },
-    "CONTAINER": {
-        "label":    "Contêineres",
-        "hint":     "Imagens Docker · Kubernetes",
-        "icon":     "box",
-        "color":    "cyan",
-        "extra_fields": ["image_name", "registry", "tag", "digest", "base_os"],
-    },
-    "VM": {
-        "label":    "Máquinas Virtuais",
-        "hint":     "VMs · Instâncias · Bare Metal",
-        "icon":     "monitor",
-        "color":    "amber",
-        "extra_fields": ["host", "ip_address", "os", "provider", "instance_type"],
-    },
-    "DOMAIN": {
-        "label":    "Domínios & APIs",
-        "hint":     "Endpoints expostos · APIs públicas",
-        "icon":     "globe",
-        "color":    "emerald",
-        "extra_fields": ["host", "url", "protocol", "port", "api_type"],
-    },
-}
-
-
-# ── I/O helpers ──────────────────────────────────────────────────────────────
-def _load() -> List[dict]:
-    if not os.path.exists(DATA_FILE):
+def _aggregate_assets_from_findings() -> List[dict]:
+    if not os.path.exists(FINDINGS_FILE):
         return []
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        raw = f.read().strip()
-        if not raw or raw == "null":
-            return []
-        return json.loads(raw)
+    try:
+        with open(FINDINGS_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+            if not raw or raw == "null":
+                findings = []
+            else:
+                findings = json.loads(raw)
+    except Exception:
+        findings = []
 
+    assets_map = {}
+    
+    for f in findings:
+        target = f.get("asset_id") or f.get("endpoint") or "Unknown"
+        tool = (f.get("tool") or "").lower()
+        tags = [t.upper() for t in f.get("tags", [])]
+        severity = (f.get("severity") or "LOW").upper()
+        last_seen_str = f.get("created_at") or datetime.utcnow().isoformat()
+        
+        # Deduce type based on source/tool
+        asset_type = "DOMAIN"
+        if "SAST" in tags or "SECRETS" in tags or "gitleaks" in tool or "semgrep" in tool:
+            asset_type = "REPOSITORY"
+        elif "DAST" in tags or "zap" in tool or "nuclei" in tool:
+            asset_type = "DOMAIN"
+        elif "CONTAINER" in tags or "trivy" in tool:
+            asset_type = "CONTAINER"
+        elif "CLOUD" in tags or "IAC" in tags or "checkov" in tool:
+            asset_type = "CLOUD"
+            
+        if target not in assets_map:
+            assets_map[target] = {
+                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, target)),
+                "name": target,
+                "asset_type": asset_type,
+                "criticality": "LOW",
+                "findings_count": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+                "total_vulnerabilities": 0,
+                "last_seen": last_seen_str,
+                "status": "active"
+            }
+            
+        asset = assets_map[target]
+        
+        # Override DOMAIN with more specific type if found in another finding for the same target
+        if asset["asset_type"] == "DOMAIN" and asset_type != "DOMAIN":
+            asset["asset_type"] = asset_type
+            
+        if last_seen_str > asset["last_seen"]:
+            asset["last_seen"] = last_seen_str
+            
+        asset["total_vulnerabilities"] += 1
+        sev_key = severity.lower()
+        if sev_key in asset["findings_count"]:
+            asset["findings_count"][sev_key] += 1
+            
+    # Calculate max criticality
+    for asset in assets_map.values():
+        c = asset["findings_count"]
+        if c["critical"] > 0:
+            asset["criticality"] = "CRITICAL"
+        elif c["high"] > 0:
+            asset["criticality"] = "HIGH"
+        elif c["medium"] > 0:
+            asset["criticality"] = "MEDIUM"
+            
+    return list(assets_map.values())
+
+def _load() -> List[dict]:
+    return _aggregate_assets_from_findings()
 
 def _save(data: List[dict]) -> None:
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+    pass # Ready-only view from findings now
 
 
 def _build_asset(body: dict) -> dict:
