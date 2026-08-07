@@ -114,23 +114,29 @@ export default function RiskGraphCanvas({ repo, onBack }) {
           if (cached) {
             try {
               const parsed = JSON.parse(cached);
-              let isVuln = false;
-              
-              if (parsed.inherited && parsed.clean) {
-                isVuln = false;
-              } else if (Array.isArray(parsed)) {
-                isVuln = parsed.length > 0;
-              } else if (typeof parsed === 'object' && parsed !== null) {
-                isVuln = Object.values(parsed).some(arr => Array.isArray(arr) ? arr.length > 0 : Object.keys(arr || {}).length > 0);
+
+              // Formato novo: objeto com vulnerable/severity explícitos
+              if (typeof parsed === 'object' && parsed !== null && 'vulnerable' in parsed) {
+                c.scanner_results = parsed.scanner_results;
+                initialSast[c.sha] = {
+                  loading:         false,
+                  analysis:        null,
+                  vulnerable:      parsed.vulnerable === true,
+                  severity:        parsed.severity || (parsed.vulnerable ? 'HIGH' : 'CLEAN'),
+                  scan_status:     parsed.scan_status || 'OK',
+                  scanner_results: parsed.scanner_results,
+                };
+              } else {
+                // Formato legado: apenas scanner_results sem metadados
+                const isVuln = parsed.inherited
+                  ? parsed.clean === false
+                  : Array.isArray(parsed) ? parsed.length > 0 : false;
+                c.scanner_results = parsed;
+                initialSast[c.sha] = {
+                  loading: false, analysis: null,
+                  vulnerable: isVuln, scanner_results: parsed,
+                };
               }
-              
-              c.scanner_results = parsed;
-              initialSast[c.sha] = {
-                loading: false,
-                analysis: null,
-                scanner_results: parsed,
-                vulnerable: isVuln
-              };
             } catch (e) {
               console.error("Falha ao hidratar cache de scan do commit", c.sha);
             }
@@ -320,7 +326,12 @@ export default function RiskGraphCanvas({ repo, onBack }) {
       setSastResults(prev => ({ ...prev, [sha]: { ...data, loading: false, analysis: null } }));
       
       // Gravação na Memória do Navegador para persistência em F5 / troca de abas
-      localStorage.setItem('previswit_scan_' + sha, JSON.stringify(data.scanner_results));
+      localStorage.setItem('previswit_scan_' + sha, JSON.stringify({
+        vulnerable:      data.vulnerable,
+        severity:        data.severity,
+        scan_status:     data.scan_status,
+        scanner_results: data.scanner_results,
+      }));
     } catch (e) {
       setSastResults(prev => ({ ...prev, [sha]: {
         loading: false,
