@@ -496,8 +496,8 @@ export default function RiskGraphCanvas({ repo, onBack }) {
         targetCommits = commits.slice(0, 5);
       }
 
-      let combinedFindings = [];
-      let combinedFiles = [];
+      // Cada commit é escaneado individualmente e empacotado com sua identidade
+      const commitsData = [];
 
       for (const commit of targetCommits) {
         const sha = commit.sha;
@@ -519,31 +519,34 @@ export default function RiskGraphCanvas({ repo, onBack }) {
           body: JSON.stringify({
             sha,
             message: commit.message,
-            author: commit.author,
-            date: commit.date,
-            branch: commit.branch_name,
-            files: files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
+            author:  commit.author,
+            date:    commit.date,
+            branch:  commit.branch_name,
+            files:   files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
             repo_url: `https://github.com/${repo.owner}/${repo.name}.git`
           })
         });
-        
+
         if (sastRes.ok) {
-           const sastData = await sastRes.json();
-           if (sastData.scanner_results) {
-             if (Array.isArray(sastData.scanner_results)) {
-               combinedFindings.push(...sastData.scanner_results);
-             } else {
-               // Novo formato dicionário: anexa o objeto inteiro para a IA avaliar
-               combinedFindings.push(sastData.scanner_results);
-             }
-           }
+          const sastData = await sastRes.json();
+          // Atualiza o badge do commit na árvore
+          setSastResults(prev => ({ ...prev, [sha]: { ...sastData, loading: false, analysis: null } }));
+          commitsData.push({
+            sha:             commit.sha,
+            message:         commit.message,
+            author:          commit.author,
+            date:            commit.date,
+            branch:          commit.branch_name,
+            files:           files.map(f => ({ filename: f.filename, patch: f.patch || '' })),
+            vulnerable:      sastData.vulnerable,
+            severity:        sastData.severity,
+            scanner_results: sastData.scanner_results,
+          });
         }
-        
-        combinedFiles.push(...files.map(f => ({ filename: f.filename, patch: f.patch || '' })));
       }
 
       const apiKey = sessionStorage.getItem('gemini_api_key');
-      const headers = { 
+      const headers = {
         'Content-Type': 'application/json',
         'X-Gemini-Key': apiKey || ''
       };
@@ -554,13 +557,12 @@ export default function RiskGraphCanvas({ repo, onBack }) {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          sha: mainCommit.sha,
-          message: type === 'all' ? 'Múltiplos commits analisados (Visão Executiva)' : mainCommit.message,
-          author: mainCommit.author,
-          date: mainCommit.date,
-          branch: mainCommit.branch_name,
-          files: combinedFiles,
-          scanner_results: combinedFindings,
+          sha:          mainCommit.sha,
+          message:      'Análise executiva de múltiplos commits',
+          author:       mainCommit.author,
+          date:         mainCommit.date,
+          branch:       mainCommit.branch_name,
+          commits_data: commitsData,
           executive_mode: true
         })
       });

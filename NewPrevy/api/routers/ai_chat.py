@@ -120,131 +120,177 @@ class SASTValidationRequest(BaseModel):
     branch:  Optional[str] = ""
     files:   Optional[list] = []
     scanner_results: Optional[Union[dict, list]] = {}
+    commits_data: Optional[list] = []   # lista de { sha, message, author, date, scanner_results, vulnerable }
     commit_data: Optional[dict] = {}
     executive_mode: Optional[bool] = False
+
+
+def _extract_findings(scanner_results: dict, sha: str = "") -> list:
+    """Extrai findings reais (vulnerabilidades HIGH/CRITICAL) de um scanner_results dict."""
+    findings = []
+    if not isinstance(scanner_results, dict):
+        return findings
+
+    # Trivy — apenas HIGH/CRITICAL
+    trivy = scanner_results.get("trivy", {})
+    if isinstance(trivy, dict):
+        for r in trivy.get("Results", []):
+            target = r.get("Target", "unknown")
+            for v in r.get("Vulnerabilities", []):
+                if v.get("Severity", "").upper() in ("HIGH", "CRITICAL"):
+                    findings.append({
+                        "tool": "Trivy", "sha": sha, "file": target,
+                        "rule": v.get("Title") or v.get("VulnerabilityID", "Vuln"),
+                        "severity": v.get("Severity", ""),
+                    })
+
+    # Semgrep
+    semgrep = scanner_results.get("semgrep", {})
+    if isinstance(semgrep, dict):
+        for r in semgrep.get("results", []):
+            findings.append({
+                "tool": "Semgrep", "sha": sha,
+                "file": r.get("path", "unknown"),
+                "rule": r.get("check_id", "Vuln"),
+                "severity": r.get("extra", {}).get("severity", ""),
+            })
+
+    # Gitleaks
+    gitleaks = scanner_results.get("gitleaks", [])
+    if isinstance(gitleaks, list):
+        for r in gitleaks:
+            if isinstance(r, dict):
+                findings.append({
+                    "tool": "Gitleaks", "sha": sha,
+                    "file": r.get("File", "unknown"),
+                    "rule": r.get("Description", "Secret Leaked"),
+                    "severity": "CRITICAL",
+                })
+
+    # Checkov
+    checkov = scanner_results.get("checkov", {})
+    checkov_reports = checkov if isinstance(checkov, list) else [checkov]
+    for report in checkov_reports:
+        if isinstance(report, dict):
+            for fc in report.get("results", {}).get("failed_checks", []):
+                findings.append({
+                    "tool": "Checkov", "sha": sha,
+                    "file": fc.get("file_path", "unknown"),
+                    "rule": fc.get("check_name", "Check failed"),
+                    "severity": fc.get("severity", ""),
+                })
+
+    return findings
 
 
 @router.post("/validate-sast", summary="Validação de Segurança via IA (Gemini)")
 async def validate_sast_endpoint(body: SASTValidationRequest, x_gemini_key: str = Header(..., alias="X-Gemini-Key")):
     """
-    Recebe os resultados técnicos dos scanners (Semgrep/Trivy) e o diff do commit,
-    usando a IA como auditora para gerar a Prova Técnica de Segurança ou explicar
-    as vulnerabilidades encontradas.
+    Recebe resultados dos scanners e o diff do commit.
+    Suporta análise de commit único (scanner_results) ou múltiplos (commits_data).
     """
     import logging
     import asyncio
-    import time as _time
     import json
-    
+
     logger = logging.getLogger("previswit.ai_chat")
 
     if not x_gemini_key:
-        raise HTTPException(status_code=401, detail="Header 'X-Gemini-Key' é obrigatório. Configure a chave na interface.")
+        raise HTTPException(status_code=401, detail="Header 'X-Gemini-Key' é obrigatório.")
 
     analysis_text = ""
-    
-    # Tratamento de formato (List vs Dict)
-    all_findings = []
-    if isinstance(body.scanner_results, list):
-        all_findings = body.scanner_results
-    elif isinstance(body.scanner_results, dict):
-        for tool, results in body.scanner_results.items():
-            if tool == "trivy" and isinstance(results, dict):
-                for r in results.get("Results", []):
-                    target = r.get("Target", "unknown")
-                    for vuln in r.get("Vulnerabilities", []):
-                        all_findings.append({"tool": "Trivy", "file": target, "rule": vuln.get("Title", "Vuln")})
-                    for misc in r.get("Misconfigurations", []):
-                        all_findings.append({"tool": "Trivy", "file": target, "rule": misc.get("Title", "Misc")})
-            
-            elif tool == "semgrep" and isinstance(results, dict):
-                for r in results.get("results", []):
-                    all_findings.append({"tool": "Semgrep", "file": r.get("path", "unknown"), "rule": r.get("check_id", "Vuln")})
-            
-            elif tool == "checkov":
-                # Checkov pode retornar um dict (1 framework) ou list de dicts (múltiplos)
-                checkov_reports = results if isinstance(results, list) else [results]
-                for report in checkov_reports:
-                    if isinstance(report, dict):
-                        failed = report.get("results", {}).get("failed_checks", [])
-                        if isinstance(failed, list):
-                            for fc in failed:
-                                all_findings.append({"tool": "Checkov", "file": fc.get("file_path", "unknown"), "rule": fc.get("check_name", "Check failed")})
-                                
-            elif tool == "gitleaks" and isinstance(results, list):
-                for r in results:
-                    if isinstance(r, dict):
-                        all_findings.append({"tool": "Gitleaks", "file": r.get("File", "unknown"), "rule": r.get("Description", "Secret Leaked")})
+    multi_commit_mode = bool(body.commits_data)
 
-    vulnerable = len(all_findings) > 0
+    # ── Extração de findings reais ────────────────────────────────────────────
+    if multi_commit_mode:
+        # Processa cada commit individualmente com identificação
+        per_commit = []
+        for c in body.commits_data:
+            sr = c.get("scanner_results") or {}
+            findings = _extract_findings(sr, sha=c.get("sha", "")[:8])
+            per_commit.append({
+                "sha":      c.get("sha", "")[:8],
+                "message":  (c.get("message") or "")[:80],
+                "author":   c.get("author", ""),
+                "date":     c.get("date", ""),
+                "vulnerable": c.get("vulnerable", len(findings) > 0),
+                "severity": c.get("severity", "HIGH" if findings else "CLEAN"),
+                "findings": findings,
+            })
+        all_findings = [f for c in per_commit for f in c["findings"]]
+        vulnerable = any(c["vulnerable"] for c in per_commit)
+    else:
+        # Commit único
+        sr = body.scanner_results if isinstance(body.scanner_results, dict) else {}
+        all_findings = _extract_findings(sr, sha=body.sha[:8])
+        vulnerable = len(all_findings) > 0
+        per_commit = [{
+            "sha": body.sha[:8], "message": (body.message or "")[:80],
+            "author": body.author, "date": body.date,
+            "vulnerable": vulnerable,
+            "severity": "HIGH" if vulnerable else "CLEAN",
+            "findings": all_findings,
+        }]
 
     try:
         from google import genai as _genai
         from google.genai import types as _types
 
-        # Prepara o diff textual dos arquivos para dar contexto ao Gemini
-        diff_summary = ""
-        for f in (body.files or [])[:5]:
-            if isinstance(f, dict):
-                diff_summary += f"\n### {f.get('filename', '')}\n```\n{(f.get('patch') or '')[:800]}\n```\n"
-
-        rastreabilidade_rule = (
-            f"\n\nDADOS DO COMMIT:\n"
-            f"- Hash: {body.sha}\n"
-            f"- Autor: {body.author}\n"
-            f"- Data: {body.date}\n\n"
-            "REGRA DE RASTREABILIDADE: Todo relatório gerado DEVE iniciar obrigatoriamente "
-            "com um cabeçalho identificando o ID do Commit (Hash), o Autor e a Data da alteração. "
-            "O relatório deve ser completo e detalhado."
-        )
-
-        MAX_CHARS = 80000
-        scan_json = json.dumps(body.scanner_results, ensure_ascii=False) if body.scanner_results else "[]"
-        if len(scan_json) > MAX_CHARS:
-            scan_json = scan_json[:MAX_CHARS] + "\n... [DADOS TRUNCADOS PARA EVITAR ESTOURO DE TOKENS DA IA]"
+        MAX_CHARS = 60000
 
         if body.executive_mode:
+            # Constrói sumário por commit para o CISO
+            commit_lines = []
+            for c in per_commit:
+                status = f"⚠️ {len(c['findings'])} achado(s)" if c["vulnerable"] else "✅ Limpo"
+                line = f"- `{c['sha']}` ({c['author']}, {c['date'][:10]}): {status}"
+                if c["findings"]:
+                    for f in c["findings"][:3]:
+                        line += f"\n  • [{f['tool']}] {f['file']}: {f['rule']}"
+                commit_lines.append(line)
+
+            commits_summary = "\n".join(commit_lines)
             prompt = (
-                "Você é um CISO (Chief Information Security Officer) falando com um executivo não-técnico. "
-                "O relatório DEVE conter:\n"
-                "1) O ID do Commit analisado.\n"
-                "2) Se houver vulnerabilidade, explique em um parágrafo o PORQUÊ isso é um risco para o negócio, "
-                "detalhando o impacto financeiro, de imagem ou regulatório (ex: ISO 27001/LGPD). "
-                "Não cite linhas de código ou termos técnicos profundos. Apenas o impacto e a recomendação de negócio.\n\n"
-                f"RESULTADO DOS SCANNERS (Vulnerável: {vulnerable}):\n{scan_json}\n\n"
-                "Resuma o impacto de negócios de forma clara, direta e em português."
+                "Você é um CISO falando com um executivo não-técnico. "
+                f"Foram analisados {len(per_commit)} commit(s) do repositório.\n\n"
+                f"SUMÁRIO POR COMMIT:\n{commits_summary}\n\n"
+                "Gere um relatório executivo em português que:\n"
+                "1. Liste cada commit pelo seu hash e indique se está vulnerável ou limpo.\n"
+                "2. Para os commits com achados, explique o impacto no negócio (financeiro, "
+                "regulatório, imagem) sem termos técnicos profundos.\n"
+                "3. Finalize com uma recomendação de prioridade de ação.\n"
+                "Seja direto e objetivo."
             )
         else:
+            diff_summary = ""
+            for f in (body.files or [])[:5]:
+                if isinstance(f, dict):
+                    diff_summary += f"\n### {f.get('filename', '')}\n```\n{(f.get('patch') or '')[:600]}\n```\n"
+
+            scan_json = json.dumps(all_findings, ensure_ascii=False)
+            if len(scan_json) > MAX_CHARS:
+                scan_json = scan_json[:MAX_CHARS] + "\n... [TRUNCADO]"
+
             if vulnerable:
                 prompt = (
-                    "Você é um Auditor Sênior de Segurança de Software (AppSec). "
-                    f"Analise os seguintes achados SAST do commit `{body.sha[:8]}` "
-                    f"('{body.message[:80]}' por {body.author}):\n\n"
-                    f"ACHADOS (JSON Bruto/Truncado):\n{scan_json}\n\n"
-                    f"DIFF DO CÓDIGO:\n{diff_summary}\n\n"
+                    f"Você é um Auditor Sênior de Segurança (AppSec). "
+                    f"Commit `{body.sha[:8]}` ('{(body.message or '')[:80]}' por {body.author}).\n\n"
+                    f"ACHADOS HIGH/CRITICAL:\n{scan_json}\n\n"
+                    f"DIFF:\n{diff_summary}\n\n"
                     "Para cada achado: explique o risco real (CWE, CVSS estimado), o impacto "
-                    "possível em produção e a correção exata recomendada com exemplo de código "
-                    "quando aplicável. Seja direto e técnico em português brasileiro. "
-                    "Comece com uma linha: NÍVEL DE RISCO: [CRÍTICO/ALTO/MÉDIO]"
+                    "possível em produção e a correção exata. Seja técnico e direto em pt-BR. "
+                    "Comece com: NÍVEL DE RISCO: [CRÍTICO/ALTO/MÉDIO]"
                 )
             else:
                 prompt = (
-                    "Você é Auditor Sênior de Segurança de Software (AppSec). "
-                    f"As ferramentas Semgrep e Trivy NÃO encontraram vulnerabilidades no commit "
-                    f"`{body.sha[:8]}` ('{body.message[:80]}' por {body.author}).\n\n"
-                    f"DIFF DO CÓDIGO ANALISADO:\n{diff_summary or 'Sem arquivos alterados disponíveis.'}\n\n"
-                    "REGRA ABSOLUTA: Você DEVE fornecer um relatório técnico de segurança detalhado "
-                    "explicando ESTRITAMENTE o PORQUÊ o código está seguro. Analise o diff acima e:\n"
-                    "1. Descreva as mudanças de código implementadas neste commit.\n"
-                    "2. Explique tecnicamente por que a lógica implementada NÃO abre margem para "
-                    "vulnerabilidades (ausência de injeção, sanitização correta, autenticação preservada, etc.).\n"
-                    "3. Mencione quais vetores de ataque foram inspecionados e descartados (SQLi, XSS, SSRF, "
-                    "exposição de credenciais, etc.) com justificativa técnica.\n"
-                    "4. Conclua com: 'VEREDICTO: Código Seguro — [motivo principal em 1 linha]'.\n\n"
-                    "Responda em português brasileiro de forma técnica e precisa."
+                    f"Você é Auditor Sênior de Segurança (AppSec). "
+                    f"Semgrep, Trivy, Gitleaks e Checkov NÃO encontraram vulnerabilidades HIGH/CRITICAL "
+                    f"no commit `{body.sha[:8]}` ('{(body.message or '')[:80]}' por {body.author}).\n\n"
+                    f"DIFF:\n{diff_summary or 'Sem arquivos disponíveis.'}\n\n"
+                    "Explique tecnicamente por que o código está seguro, quais vetores foram "
+                    "inspecionados (SQLi, XSS, SSRF, secrets) e conclua com: "
+                    "'VEREDICTO: Código Seguro — [motivo em 1 linha]'. Responda em pt-BR."
                 )
-
-        prompt += rastreabilidade_rule
 
         client = _genai.Client(api_key=x_gemini_key)
         for attempt in range(3):
