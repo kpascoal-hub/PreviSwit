@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from typing import Optional, Literal
 from datetime import datetime, timezone
 import logging
+from core.scanners.cve_enricher import build_cve_report
 
 logger = logging.getLogger("previswit.sast")
 
@@ -288,15 +289,17 @@ async def analyze_commit(
         # 4. Limpeza Letal (Crucial)
         shutil.rmtree(diretorio_temporario, ignore_errors=True)
 
-    severity = "HIGH" if is_vulnerable else "CLEAN"
+    severity   = "HIGH" if is_vulnerable else "CLEAN"
+    cve_report = build_cve_report(trivy_data, semgrep_data)
 
     return {
-        "sha":         body.sha,
-        "vulnerable":  is_vulnerable,
-        "severity":    severity,
+        "sha":             body.sha,
+        "vulnerable":      is_vulnerable,
+        "severity":        severity,
         "scanner_results": scanner_results,
-        "tools_used":  ["Semgrep", "Trivy", "Gitleaks", "Checkov"],
-        "analyzed_at": datetime.now(timezone.utc).isoformat(),
+        "cve_report":      cve_report,
+        "tools_used":      ["Semgrep", "Trivy", "Gitleaks", "Checkov"],
+        "analyzed_at":     datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -417,14 +420,18 @@ def run_background_repo_scan(scan_id: str, repo_url: str, gemini_key: str, ai_su
                 logger.error(f"Erro ao gerar insight Gemini: {e}")
                 insight_text = "Erro ao conectar com o motor de IA."
 
-        # 4. Finalização
+        # 4. CVE Enrichment via OSV.dev
+        cve_report = build_cve_report(trivy_data, semgrep_data)
+
+        # 5. Finalização
         REPO_SCANS[scan_id]["data"] = {
-            "vulnerable": is_vulnerable,
-            "severity": severity,
+            "vulnerable":      is_vulnerable,
+            "severity":        severity,
             "scanner_results": scanner_results,
-            "ai_insight": insight_text,
-            "tools_used": ["Semgrep", "Trivy", "Gitleaks", "Checkov", "Gemini AI"],
-            "analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "cve_report":      cve_report,
+            "ai_insight":      insight_text,
+            "tools_used":      ["Semgrep", "Trivy", "Gitleaks", "Checkov", "Gemini AI"],
+            "analyzed_at":     datetime.now(timezone.utc).isoformat(),
         }
         REPO_SCANS[scan_id]["status"] = "CONCLUÍDO"
         logger.info(f"[SAST Background] Scan {scan_id} finalizado.")
