@@ -203,102 +203,150 @@ async def analyze_commit(
     Execução de SAST Real (Trivy) via Gêmeo Efêmero
     """
     if not body.repo_url:
-        logger.warning(f"repo_url não fornecido para {body.sha}. Apenas arquivos patchados serão ignorados pelo Trivy.")
-        # Sem repo_url, não podemos clonar
-        # Caso precise falhar: raise HTTPException(status_code=400, detail="repo_url é obrigatório")
+        return {
+            "sha":             body.sha,
+            "vulnerable":      False,
+            "severity":        "UNKNOWN",
+            "scan_status":     "SKIPPED",
+            "scanner_results": {},
+            "cve_report":      {},
+            "tool_errors":     {"all": "repo_url não fornecido — clone impossível"},
+            "tools_used":      [],
+            "analyzed_at":     datetime.now(timezone.utc).isoformat(),
+        }
 
-    all_findings = []
+    # Valores padrão — garantem que o retorno final nunca falha por escopo
+    semgrep_data   = {}
+    trivy_data     = {}
+    gitleaks_data  = []
+    checkov_data   = {}
+    tool_errors    = {}
     diretorio_temporario = tempfile.mkdtemp(prefix="previswit_sast_")
 
     try:
-        if body.repo_url:
-            # 1. Clonagem Cirúrgica
-            subprocess.run(["git", "clone", body.repo_url, diretorio_temporario], capture_output=True, check=False)
-            subprocess.run(["git", "checkout", body.sha], cwd=diretorio_temporario, capture_output=True, check=False)
+        # 1. Clonagem Cirúrgica
+        subprocess.run(["git", "clone", body.repo_url, diretorio_temporario],
+                       capture_output=True, check=False)
+        subprocess.run(["git", "checkout", body.sha],
+                       cwd=diretorio_temporario, capture_output=True, check=False)
 
-            # 2. A Execução Real (O Quarteto Fantástico)
-            
-            # Semgrep
-            semgrep_res = subprocess.run(["semgrep", "scan", "--config", "auto", "--json", diretorio_temporario], capture_output=True, text=True)
-            try:
-                semgrep_data = json.loads(semgrep_res.stdout) if semgrep_res.stdout else {}
-            except Exception:
-                semgrep_data = {}
-                
-            # Trivy
-            trivy_res = subprocess.run(["trivy", "fs", "--format", "json", diretorio_temporario], capture_output=True, text=True)
-            try:
-                out_text = trivy_res.stdout
-                if "{" in out_text:
-                    out_text = out_text[out_text.index("{"):]
-                trivy_data = json.loads(out_text) if out_text else {}
-            except Exception:
-                trivy_data = {}
-                
-            # Gitleaks
-            gitleaks_res = subprocess.run(["gitleaks", "detect", "--source", diretorio_temporario, "--report-format", "json", "--no-git", "--exit-code", "0"], capture_output=True, text=True)
-            try:
-                gitleaks_data = json.loads(gitleaks_res.stdout) if gitleaks_res.stdout else []
-            except Exception:
-                gitleaks_data = []
-                
-            # Checkov
-            checkov_res = subprocess.run(["checkov", "-d", diretorio_temporario, "-o", "json", "--soft-fail"], capture_output=True, text=True)
-            try:
-                out_checkov = checkov_res.stdout
-                if "{" in out_checkov or "[" in out_checkov:
-                    first_brace = out_checkov.find("{")
-                    first_bracket = out_checkov.find("[")
-                    if first_brace != -1 and first_bracket != -1:
-                        start_idx = min(first_brace, first_bracket)
-                    else:
-                        start_idx = max(first_brace, first_bracket)
-                    out_checkov = out_checkov[start_idx:]
-                checkov_data = json.loads(out_checkov) if out_checkov else {}
-            except Exception:
-                checkov_data = {}
+        # 2. Execução dos scanners — cada um isolado para não derrubar os demais
 
-            # 3. Unificação e Retorno
-            semgrep_vuln = bool(semgrep_data.get("results", []))
-            trivy_vuln = False
-            for r in trivy_data.get("Results", []):
-                if r.get("Vulnerabilities") or r.get("Misconfigurations"):
-                    trivy_vuln = True
-                    break
-            gitleaks_vuln = bool(gitleaks_data)
-            checkov_vuln = False
-            if isinstance(checkov_data, list):
-                for report in checkov_data:
-                    if report.get("results", {}).get("failed_checks"):
-                        checkov_vuln = True
-                        break
-            elif isinstance(checkov_data, dict):
-                if checkov_data.get("results", {}).get("failed_checks"):
-                    checkov_vuln = True
-                    
-            is_vulnerable = semgrep_vuln or trivy_vuln or gitleaks_vuln or checkov_vuln
-            
-            scanner_results = {
-                "semgrep": semgrep_data,
-                "trivy": trivy_data,
-                "gitleaks": gitleaks_data,
-                "checkov": checkov_data
-            }
+        # Semgrep
+        try:
+            semgrep_res = subprocess.run(
+                ["semgrep", "scan", "--config", "auto", "--json", diretorio_temporario],
+                capture_output=True, text=True,
+            )
+            semgrep_data = json.loads(semgrep_res.stdout) if semgrep_res.stdout else {}
+        except FileNotFoundError:
+            tool_errors["semgrep"] = "binário não encontrado"
+        except Exception as e:
+            tool_errors["semgrep"] = str(e)
+
+        # Trivy
+        try:
+            trivy_res = subprocess.run(
+                ["trivy", "fs", "--format", "json", diretorio_temporario],
+                capture_output=True, text=True,
+            )
+            out_text = trivy_res.stdout
+            if "{" in out_text:
+                out_text = out_text[out_text.index("{"):]
+            trivy_data = json.loads(out_text) if out_text else {}
+        except FileNotFoundError:
+            tool_errors["trivy"] = "binário não encontrado"
+        except Exception as e:
+            tool_errors["trivy"] = str(e)
+
+        # Gitleaks
+        try:
+            gitleaks_res = subprocess.run(
+                ["gitleaks", "detect", "--source", diretorio_temporario,
+                 "--report-format", "json", "--no-git", "--exit-code", "0"],
+                capture_output=True, text=True,
+            )
+            gitleaks_data = json.loads(gitleaks_res.stdout) if gitleaks_res.stdout else []
+        except FileNotFoundError:
+            tool_errors["gitleaks"] = "binário não encontrado"
+        except Exception as e:
+            tool_errors["gitleaks"] = str(e)
+
+        # Checkov
+        try:
+            checkov_res = subprocess.run(
+                ["checkov", "-d", diretorio_temporario, "-o", "json", "--soft-fail"],
+                capture_output=True, text=True,
+            )
+            out_checkov = checkov_res.stdout
+            if "{" in out_checkov or "[" in out_checkov:
+                start = min(
+                    (out_checkov.find(c) for c in ("{", "[") if c in out_checkov),
+                )
+                out_checkov = out_checkov[start:]
+            checkov_data = json.loads(out_checkov) if out_checkov else {}
+        except FileNotFoundError:
+            tool_errors["checkov"] = "binário não encontrado"
+        except Exception as e:
+            tool_errors["checkov"] = str(e)
 
     finally:
-        # 4. Limpeza Letal (Crucial)
         shutil.rmtree(diretorio_temporario, ignore_errors=True)
 
-    severity   = "HIGH" if is_vulnerable else "CLEAN"
+    # 3. Determinação de vulnerabilidade — apenas severidade HIGH/CRITICAL conta
+    _HIGH_SEVERITY = {"HIGH", "CRITICAL"}
+
+    semgrep_vuln = any(
+        f.get("extra", {}).get("severity", "").upper() in _HIGH_SEVERITY
+        for f in semgrep_data.get("results", [])
+    )
+
+    trivy_vuln = any(
+        vuln.get("Severity", "").upper() in _HIGH_SEVERITY
+        for result in trivy_data.get("Results", [])
+        for vuln in result.get("Vulnerabilities", [])
+    )
+
+    gitleaks_vuln = bool(gitleaks_data)  # qualquer segredo exposto = crítico
+
+    checkov_reports = checkov_data if isinstance(checkov_data, list) else [checkov_data]
+    checkov_vuln = any(
+        report.get("results", {}).get("failed_checks")
+        for report in checkov_reports
+        if isinstance(report, dict)
+    )
+
+    is_vulnerable = semgrep_vuln or trivy_vuln or gitleaks_vuln or checkov_vuln
+
+    # 4. Mapeamento de severidade real
+    all_tools_failed = len(tool_errors) == 4
+    if all_tools_failed:
+        severity    = "ERROR"
+        scan_status = "ERROR"
+    elif tool_errors:
+        severity    = "HIGH" if is_vulnerable else "PARTIAL"
+        scan_status = "PARTIAL"
+    else:
+        severity    = "HIGH" if is_vulnerable else "CLEAN"
+        scan_status = "OK"
+
+    scanner_results = {
+        "semgrep":  semgrep_data,
+        "trivy":    trivy_data,
+        "gitleaks": gitleaks_data,
+        "checkov":  checkov_data,
+    }
     cve_report = build_cve_report(trivy_data, semgrep_data)
 
     return {
         "sha":             body.sha,
         "vulnerable":      is_vulnerable,
         "severity":        severity,
+        "scan_status":     scan_status,
         "scanner_results": scanner_results,
         "cve_report":      cve_report,
-        "tools_used":      ["Semgrep", "Trivy", "Gitleaks", "Checkov"],
+        "tool_errors":     tool_errors,
+        "tools_used":      [t for t in ["semgrep", "trivy", "gitleaks", "checkov"] if t not in tool_errors],
         "analyzed_at":     datetime.now(timezone.utc).isoformat(),
     }
 
