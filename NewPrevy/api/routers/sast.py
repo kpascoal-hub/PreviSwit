@@ -186,6 +186,169 @@ import os
 import shutil
 import tempfile
 import json
+import hashlib
+
+FINDINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "findings.json")
+
+def _load_findings() -> list:
+    if not os.path.exists(FINDINGS_FILE):
+        return []
+    try:
+        with open(FINDINGS_FILE, "r", encoding="utf-8") as f:
+            data = f.read().strip()
+            return json.loads(data) if data and data != "null" else []
+    except Exception:
+        return []
+
+def _save_findings_file(data: list) -> None:
+    os.makedirs(os.path.dirname(FINDINGS_FILE), exist_ok=True)
+    with open(FINDINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+
+def _persist_findings_from_scan(
+    repo_url: str, sha: str,
+    semgrep_data: dict, trivy_data: dict,
+    gitleaks_data: list, checkov_data,
+) -> int:
+    """
+    Converte resultados de scanner em findings e salva em findings.json.
+    Usa dedup_key (md5) para evitar duplicatas ao re-escanear o mesmo commit.
+    Retorna o número de novos findings salvos.
+    """
+    import uuid as _uuid
+    asset_id = repo_url.rstrip("/").split("/")[-1]
+    existing = _load_findings()
+    existing_keys = {f.get("dedup_key") for f in existing if f.get("dedup_key")}
+    new_findings = []
+    now = datetime.now(timezone.utc).isoformat()
+    _HIGH_SEV = {"HIGH", "CRITICAL"}
+
+    def _dedup(key: str) -> str:
+        return hashlib.md5(key.encode()).hexdigest()
+
+    # ── Semgrep ──────────────────────────────────────────────────────────────
+    for r in semgrep_data.get("results", []):
+        sev = r.get("extra", {}).get("severity", "MEDIUM").upper()
+        if sev not in _HIGH_SEV:
+            continue
+        rule_id = r.get("check_id", "unknown")
+        path = r.get("path", "")
+        dk = _dedup(f"{asset_id}|semgrep|{rule_id}|{path}")
+        if dk in existing_keys:
+            continue
+        existing_keys.add(dk)
+        new_findings.append({
+            "id":          str(_uuid.uuid4()),
+            "dedup_key":   dk,
+            "name":        rule_id,
+            "title":       r.get("extra", {}).get("message", rule_id)[:120],
+            "description": r.get("extra", {}).get("message", ""),
+            "severity":    sev,
+            "status":      "open",
+            "asset_id":    asset_id,
+            "endpoint":    path,
+            "tool":        "semgrep",
+            "tags":        ["SAST"],
+            "commit_sha":  sha,
+            "repo_url":    repo_url,
+            "created_at":  now,
+            "updated_at":  now,
+        })
+
+    # ── Trivy ────────────────────────────────────────────────────────────────
+    for result in trivy_data.get("Results", []):
+        for vuln in result.get("Vulnerabilities", []):
+            sev = vuln.get("Severity", "").upper()
+            if sev not in _HIGH_SEV:
+                continue
+            cve_id = vuln.get("VulnerabilityID", "unknown")
+            pkg = vuln.get("PkgName", "")
+            dk = _dedup(f"{asset_id}|trivy|{cve_id}|{pkg}")
+            if dk in existing_keys:
+                continue
+            existing_keys.add(dk)
+            new_findings.append({
+                "id":            str(_uuid.uuid4()),
+                "dedup_key":     dk,
+                "name":          cve_id,
+                "title":         vuln.get("Title", cve_id)[:120],
+                "description":   vuln.get("Description", "")[:500],
+                "severity":      sev,
+                "status":        "open",
+                "asset_id":      asset_id,
+                "endpoint":      result.get("Target", ""),
+                "tool":          "trivy",
+                "tags":          ["SAST", "CVE"],
+                "cve_id":        cve_id,
+                "package":       pkg,
+                "fixed_version": vuln.get("FixedVersion", ""),
+                "commit_sha":    sha,
+                "repo_url":      repo_url,
+                "created_at":    now,
+                "updated_at":    now,
+            })
+
+    # ── Gitleaks ─────────────────────────────────────────────────────────────
+    for secret in (gitleaks_data if isinstance(gitleaks_data, list) else []):
+        rule_id = secret.get("RuleID", "secret")
+        path = secret.get("File", "")
+        dk = _dedup(f"{asset_id}|gitleaks|{rule_id}|{path}")
+        if dk in existing_keys:
+            continue
+        existing_keys.add(dk)
+        new_findings.append({
+            "id":          str(_uuid.uuid4()),
+            "dedup_key":   dk,
+            "name":        rule_id,
+            "title":       f"Segredo exposto: {rule_id}",
+            "description": f"Arquivo: {path}",
+            "severity":    "CRITICAL",
+            "status":      "open",
+            "asset_id":    asset_id,
+            "endpoint":    path,
+            "tool":        "gitleaks",
+            "tags":        ["SECRETS", "SAST"],
+            "commit_sha":  sha,
+            "repo_url":    repo_url,
+            "created_at":  now,
+            "updated_at":  now,
+        })
+
+    # ── Checkov ──────────────────────────────────────────────────────────────
+    reports = checkov_data if isinstance(checkov_data, list) else ([checkov_data] if checkov_data else [])
+    for report in reports:
+        if not isinstance(report, dict):
+            continue
+        for check in report.get("results", {}).get("failed_checks", []):
+            check_id = check.get("check_id", "unknown")
+            path = check.get("repo_file_path", check.get("file_path", ""))
+            dk = _dedup(f"{asset_id}|checkov|{check_id}|{path}")
+            if dk in existing_keys:
+                continue
+            existing_keys.add(dk)
+            new_findings.append({
+                "id":          str(_uuid.uuid4()),
+                "dedup_key":   dk,
+                "name":        check_id,
+                "title":       check.get("check_name", check_id)[:120],
+                "description": f"IaC check falhou: {check_id}",
+                "severity":    "HIGH",
+                "status":      "open",
+                "asset_id":    asset_id,
+                "endpoint":    path,
+                "tool":        "checkov",
+                "tags":        ["IAC", "SAST"],
+                "commit_sha":  sha,
+                "repo_url":    repo_url,
+                "created_at":  now,
+                "updated_at":  now,
+            })
+
+    if new_findings:
+        _save_findings_file(existing + new_findings)
+        logger.info("[SAST] %d novos findings salvos de %s@%s", len(new_findings), asset_id, sha[:8])
+    return len(new_findings)
+
 
 @router.post(
     "/analyze-commit",
@@ -337,6 +500,14 @@ async def analyze_commit(
         "checkov":  checkov_data,
     }
     cve_report = build_cve_report(trivy_data, semgrep_data)
+
+    # Persiste findings em findings.json para alimentar Assets & Findings pages
+    if body.repo_url and is_vulnerable:
+        _persist_findings_from_scan(
+            repo_url=body.repo_url, sha=body.sha,
+            semgrep_data=semgrep_data, trivy_data=trivy_data,
+            gitleaks_data=gitleaks_data, checkov_data=checkov_data,
+        )
 
     return {
         "sha":             body.sha,
