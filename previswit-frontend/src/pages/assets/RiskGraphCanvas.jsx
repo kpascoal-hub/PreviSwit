@@ -1199,21 +1199,18 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                           const isPendingScan = !scanInfo && !hasScannerResults;
                           const isScanning = scanInfo && scanInfo.loading;
                           const isScanComplete = (scanInfo && !scanInfo.loading) || hasScannerResults;
-                          let isVuln = scanInfo ? scanInfo.vulnerable : false;
-                          
-                          // Correção Visual do Badge (Falso Contágio)
-                          if (commit.scanner_results) {
+                          // Se a API retornou um resultado fresco, confiar nele diretamente.
+                          // A heurística de commit.scanner_results só serve de fallback para
+                          // cache legado (sem campo vulnerable explícito da API).
+                          let isVuln = scanInfo?.vulnerable === true;
+
+                          if (!scanInfo && commit.scanner_results) {
                             if (commit.scanner_results.clean === true) {
                               isVuln = false;
                             } else if (Array.isArray(commit.scanner_results.vulnerabilities)) {
                               isVuln = commit.scanner_results.vulnerabilities.length > 0;
-                            } else if (!commit.scanner_results.inherited) {
-                              // Se for um scan direto e não herdado, re-avaliamos os arrays das ferramentas
-                              if (Array.isArray(commit.scanner_results)) {
-                                isVuln = commit.scanner_results.length > 0;
-                              } else if (typeof commit.scanner_results === 'object') {
-                                isVuln = Object.values(commit.scanner_results).some(arr => Array.isArray(arr) ? arr.length > 0 : Object.keys(arr || {}).length > 0);
-                              }
+                            } else if (commit.scanner_results.inherited) {
+                              isVuln = commit.scanner_results.clean === false;
                             }
                           }
                           return (
