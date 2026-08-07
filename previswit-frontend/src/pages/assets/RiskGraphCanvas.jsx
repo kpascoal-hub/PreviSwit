@@ -1233,20 +1233,20 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                                 const sev = scanInfo?.severity;
                                 const isError   = sev === 'ERROR';
                                 const isPartial = sev === 'PARTIAL';
-                                const isUnknown = sev === 'UNKNOWN' || sev === 'SKIPPED';
+                                const isUnknown = !sev || sev === 'UNKNOWN' || sev === 'SKIPPED';
                                 if (isError) return (
                                   <span className="badge-completo border rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-gray-500/10 text-gray-400 border-gray-500/30">
                                     ⚙️ Erro no Scanner
                                   </span>
                                 );
-                                if (isUnknown) return (
+                                if (isUnknown && !isVuln) return (
                                   <span className="badge-completo border rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide bg-gray-500/10 text-gray-400 border-gray-500/30">
                                     — Sem dados
                                   </span>
                                 );
                                 return (
                                   <span className={`badge-completo border rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${isVuln ? 'bg-red-500/10 text-red-400 border-red-500/30' : isPartial ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
-                                    {isVuln ? `⚠️ Risco: ${sev}` : isPartial ? '⚠️ Parcial' : '🛡️ Scan Completo'}
+                                    {isVuln ? `⚠️ Risco: ${sev || 'HIGH'}` : isPartial ? '⚠️ Parcial' : '🛡️ Scan Completo'}
                                   </span>
                                 );
                               })()}
