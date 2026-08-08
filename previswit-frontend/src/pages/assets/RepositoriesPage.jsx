@@ -463,6 +463,12 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
     setScanStatus('PENDING');
     setScanData(null);
     localStorage.removeItem('previswit_sast_current_view');
+    // Limpa análise anterior para não mostrar dados obsoletos
+    setAiInsightsText('');
+    setShowFindings(false);
+    setChatMsgs([]);
+    setChatInput('');
+    setShowChat(false);
 
     const paths = scope === 'specific'
       ? [...selectedPaths, ...customPaths].filter(Boolean)
