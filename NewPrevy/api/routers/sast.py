@@ -532,135 +532,233 @@ class RepoScanBackgroundRequest(BaseModel):
     target_name: str
     interval_minutes: int = 0
     ai_summary_level: str = "EXECUTIVO"
+    scan_paths: list = []          # [] = análise completa; lista de caminhos = escopo restrito
 
-def run_background_repo_scan(scan_id: str, repo_url: str, gemini_key: str, ai_summary_level: str):
+def run_background_repo_scan(
+    scan_id: str, repo_url: str, gemini_key: str,
+    ai_summary_level: str, scan_paths: list = None,
+):
     """
-    Função assíncrona/background que clona o repo inteiro, roda os scanners,
-    e pede ao Gemini um insight sobre o resultado.
+    Clona o repositório, executa os 4 scanners SAST com tratamento
+    de falha por ferramenta, e consolida o resultado.
     """
-    logger.info(f"[SAST Background] Iniciando scan {scan_id} para {repo_url}")
+    logger.info("[SAST Background] Iniciando scan %s para %s", scan_id, repo_url)
     REPO_SCANS[scan_id]["status"] = "RUNNING"
-    
+
     diretorio_temporario = tempfile.mkdtemp(prefix="previswit_bg_sast_")
-    
+    semgrep_data  = {}
+    trivy_data    = {}
+    gitleaks_data = []
+    checkov_data  = {}
+    tool_errors   = {}
+
     try:
-        # 1. Clone total do repo (apenas depth=1 para velocidade)
-        subprocess.run(["git", "clone", "--depth", "1", repo_url, diretorio_temporario], capture_output=True, check=False)
-        
-        # 2. Executar Scanners
-        # Semgrep
-        semgrep_res = subprocess.run(["semgrep", "scan", "--config", "auto", "--json", diretorio_temporario], capture_output=True, text=True)
+        # ── 1. Clone ─────────────────────────────────────────────────────────
+        clone = subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, diretorio_temporario],
+            capture_output=True, text=True, check=False,
+        )
+        if clone.returncode != 0:
+            raise RuntimeError(f"git clone falhou: {clone.stderr[:300]}")
+
+        # ── 2. Determinar targets de scan ─────────────────────────────────────
+        if scan_paths:
+            targets = [
+                os.path.join(diretorio_temporario, p.lstrip("/\\"))
+                for p in scan_paths
+            ]
+            targets = [t for t in targets if os.path.exists(t)] or [diretorio_temporario]
+        else:
+            targets = [diretorio_temporario]
+
+        primary_target = targets[0]
+
+        # ── 3. Semgrep — usa p/security-audit (não precisa de registry online) ─
         try:
+            semgrep_cmd = [
+                "semgrep", "scan",
+                "--config", "p/security-audit",
+                "--json", "--no-git-ignore",
+            ] + targets
+            semgrep_res = subprocess.run(
+                semgrep_cmd, capture_output=True, text=True, timeout=240,
+            )
+            # fallback: se p/security-audit falhar, tenta auto
+            if semgrep_res.returncode not in (0, 1) or not semgrep_res.stdout:
+                semgrep_res = subprocess.run(
+                    ["semgrep", "scan", "--config", "auto", "--json", "--no-git-ignore"] + targets,
+                    capture_output=True, text=True, timeout=240,
+                )
             semgrep_data = json.loads(semgrep_res.stdout) if semgrep_res.stdout else {}
-        except Exception:
-            semgrep_data = {}
-            
-        # Trivy
-        trivy_res = subprocess.run(["trivy", "fs", "--format", "json", diretorio_temporario], capture_output=True, text=True)
+        except FileNotFoundError:
+            tool_errors["semgrep"] = "binário não encontrado"
+        except subprocess.TimeoutExpired:
+            tool_errors["semgrep"] = "timeout (4 min)"
+        except Exception as e:
+            tool_errors["semgrep"] = str(e)
+
+        # ── 4. Trivy ──────────────────────────────────────────────────────────
         try:
+            trivy_res = subprocess.run(
+                ["trivy", "fs", "--format", "json", primary_target],
+                capture_output=True, text=True, timeout=240,
+            )
             out_text = trivy_res.stdout
             if "{" in out_text:
                 out_text = out_text[out_text.index("{"):]
             trivy_data = json.loads(out_text) if out_text else {}
-        except Exception:
-            trivy_data = {}
-            
-        # Gitleaks
-        gitleaks_res = subprocess.run(["gitleaks", "detect", "--source", diretorio_temporario, "--report-format", "json", "--no-git", "--exit-code", "0"], capture_output=True, text=True)
+        except FileNotFoundError:
+            tool_errors["trivy"] = "binário não encontrado"
+        except subprocess.TimeoutExpired:
+            tool_errors["trivy"] = "timeout"
+        except Exception as e:
+            tool_errors["trivy"] = str(e)
+
+        # ── 5. Gitleaks ───────────────────────────────────────────────────────
         try:
+            gitleaks_res = subprocess.run(
+                ["gitleaks", "detect", "--source", primary_target,
+                 "--report-format", "json", "--no-git", "--exit-code", "0"],
+                capture_output=True, text=True, timeout=120,
+            )
             gitleaks_data = json.loads(gitleaks_res.stdout) if gitleaks_res.stdout else []
-        except Exception:
-            gitleaks_data = []
-            
-        # Checkov
-        checkov_res = subprocess.run(["checkov", "-d", diretorio_temporario, "-o", "json", "--soft-fail"], capture_output=True, text=True)
+        except FileNotFoundError:
+            tool_errors["gitleaks"] = "binário não encontrado"
+        except subprocess.TimeoutExpired:
+            tool_errors["gitleaks"] = "timeout"
+        except Exception as e:
+            tool_errors["gitleaks"] = str(e)
+
+        # ── 6. Checkov ────────────────────────────────────────────────────────
         try:
+            checkov_res = subprocess.run(
+                ["checkov", "-d", primary_target, "-o", "json", "--soft-fail"],
+                capture_output=True, text=True, timeout=120,
+            )
             out_checkov = checkov_res.stdout
             if "{" in out_checkov or "[" in out_checkov:
-                first_brace = out_checkov.find("{")
-                first_bracket = out_checkov.find("[")
-                if first_brace != -1 and first_bracket != -1:
-                    start_idx = min(first_brace, first_bracket)
-                else:
-                    start_idx = max(first_brace, first_bracket)
-                out_checkov = out_checkov[start_idx:]
+                start = min(
+                    (out_checkov.find(c) for c in ("{", "[") if c in out_checkov)
+                )
+                out_checkov = out_checkov[start:]
             checkov_data = json.loads(out_checkov) if out_checkov else {}
-        except Exception:
-            checkov_data = {}
+        except FileNotFoundError:
+            tool_errors["checkov"] = "binário não encontrado"
+        except subprocess.TimeoutExpired:
+            tool_errors["checkov"] = "timeout"
+        except Exception as e:
+            tool_errors["checkov"] = str(e)
 
-        scanner_results = {
-            "semgrep": semgrep_data,
-            "trivy": trivy_data,
-            "gitleaks": gitleaks_data,
-            "checkov": checkov_data
-        }
-
-        # Analisar vulnerabilidade geral
-        is_vulnerable = False
-        if semgrep_data.get("results", []): is_vulnerable = True
-        for r in trivy_data.get("Results", []):
-            if r.get("Vulnerabilities") or r.get("Misconfigurations"): is_vulnerable = True
-        if gitleaks_data: is_vulnerable = True
-        if isinstance(checkov_data, list):
-            for report in checkov_data:
-                if report.get("results", {}).get("failed_checks"): is_vulnerable = True
-        elif isinstance(checkov_data, dict):
-            if checkov_data.get("results", {}).get("failed_checks"): is_vulnerable = True
-
-        severity = "HIGH" if is_vulnerable else "CLEAN"
-
-                # 3. Gemini Insight
-        insight_text = "Nenhum risco detectado pelo IA Insight."
-        if is_vulnerable and gemini_key:
-            try:
-                from google import genai as _genai
-                from google.genai import types as _types
-                client = _genai.Client(api_key=gemini_key)
-                
-                foco_ia = "impacto de risco no negócio, sem se aprofundar em código (Visão Executiva)"
-                if ai_summary_level == "TECNICO":
-                    foco_ia = "detalhes técnicos das falhas, regras violadas e sugestões de correção no código (Visão Técnica)"
-                elif ai_summary_level == "CONFORMIDADE":
-                    foco_ia = "impacto em controles de conformidade como ISO 27001 e SOC2 (Visão de Conformidade)"
-
-                prompt = (
-                    f"Atue como um Arquiteto Sênior de AppSec. Analisamos o repositório {repo_url} com Semgrep, Trivy, Gitleaks e Checkov. "
-                    f"Resultados brutos (reduzidos): Semgrep ({len(semgrep_data.get('results', []))} falhas), "
-                    f"Gitleaks ({len(gitleaks_data)} segredos), Trivy ({len(trivy_data.get('Results', []))} targets).\n"
-                    f"Gere um resumo muito breve (máximo de 2 parágrafos) focado em: {foco_ia}. Retorne apenas texto limpo."
-                )
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                )
-                if response.text:
-                    insight_text = response.text.strip()
-            except Exception as e:
-                logger.error(f"Erro ao gerar insight Gemini: {e}")
-                insight_text = "Erro ao conectar com o motor de IA."
-
-        # 4. CVE Enrichment via OSV.dev
-        cve_report = build_cve_report(trivy_data, semgrep_data)
-
-        # 5. Finalização
-        REPO_SCANS[scan_id]["data"] = {
-            "vulnerable":      is_vulnerable,
-            "severity":        severity,
-            "scanner_results": scanner_results,
-            "cve_report":      cve_report,
-            "ai_insight":      insight_text,
-            "tools_used":      ["Semgrep", "Trivy", "Gitleaks", "Checkov", "Gemini AI"],
-            "analyzed_at":     datetime.now(timezone.utc).isoformat(),
-        }
-        REPO_SCANS[scan_id]["status"] = "CONCLUÍDO"
-        logger.info(f"[SAST Background] Scan {scan_id} finalizado.")
-
-    except Exception as e:
-        logger.error(f"[SAST Background] Erro no scan {scan_id}: {e}")
-        REPO_SCANS[scan_id]["status"] = "ERROR"
-        REPO_SCANS[scan_id]["error"] = str(e)
     finally:
         shutil.rmtree(diretorio_temporario, ignore_errors=True)
+
+    # ── 7. Determinação de vulnerabilidade (HIGH/CRITICAL apenas) ─────────────
+    _HIGH_SEV = {"HIGH", "CRITICAL"}
+
+    semgrep_vuln = any(
+        f.get("extra", {}).get("severity", "").upper() in _HIGH_SEV
+        for f in semgrep_data.get("results", [])
+    )
+    trivy_vuln = any(
+        vuln.get("Severity", "").upper() in _HIGH_SEV
+        for result in trivy_data.get("Results", [])
+        for vuln in result.get("Vulnerabilities", [])
+    )
+    gitleaks_vuln = bool(gitleaks_data)
+    checkov_reports = checkov_data if isinstance(checkov_data, list) else [checkov_data]
+    checkov_vuln = any(
+        report.get("results", {}).get("failed_checks")
+        for report in checkov_reports if isinstance(report, dict)
+    )
+
+    is_vulnerable  = semgrep_vuln or trivy_vuln or gitleaks_vuln or checkov_vuln
+    all_failed     = len(tool_errors) == 4
+    severity       = "ERROR" if all_failed else ("HIGH" if is_vulnerable else "CLEAN")
+    scan_status_v  = "ERROR" if all_failed else ("PARTIAL" if tool_errors else "OK")
+
+    # ── 8. Contagens para exibição no painel ──────────────────────────────────
+    def _trivy_high(td):
+        return sum(
+            1 for r in td.get("Results", [])
+            for v in r.get("Vulnerabilities", [])
+            if v.get("Severity", "").upper() in _HIGH_SEV
+        )
+    def _checkov_failed(cd):
+        reports = cd if isinstance(cd, list) else [cd]
+        return sum(
+            len(r.get("results", {}).get("failed_checks", []))
+            for r in reports if isinstance(r, dict)
+        )
+
+    counts = {
+        "semgrep":  len([
+            f for f in semgrep_data.get("results", [])
+            if f.get("extra", {}).get("severity", "").upper() in _HIGH_SEV
+        ]),
+        "trivy":    _trivy_high(trivy_data),
+        "gitleaks": len(gitleaks_data) if isinstance(gitleaks_data, list) else 0,
+        "checkov":  _checkov_failed(checkov_data),
+    }
+
+    # ── 9. Gemini Insight ─────────────────────────────────────────────────────
+    insight_text = ""
+    if is_vulnerable and gemini_key:
+        try:
+            from google import genai as _genai
+            client = _genai.Client(api_key=gemini_key)
+            foco_ia = (
+                "detalhes técnicos das falhas, regras violadas e sugestões de correção (Visão Técnica)"
+                if ai_summary_level == "TECNICO" else
+                "impacto em controles ISO 27001 e SOC2 (Visão de Conformidade)"
+                if ai_summary_level == "CONFORMIDADE" else
+                "impacto de risco no negócio, sem se aprofundar em código (Visão Executiva)"
+            )
+            prompt = (
+                f"Atue como Arquiteto Sênior de AppSec. Analisamos {repo_url} "
+                f"(Semgrep {counts['semgrep']} achados HIGH/CRITICAL, "
+                f"Trivy {counts['trivy']} CVEs HIGH/CRITICAL, "
+                f"Gitleaks {counts['gitleaks']} segredos, "
+                f"Checkov {counts['checkov']} falhas IaC). "
+                f"Gere um resumo conciso (máx. 2 parágrafos) focado em: {foco_ia}. Apenas texto limpo."
+            )
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            if response.text:
+                insight_text = response.text.strip()
+        except Exception as e:
+            logger.error("Erro Gemini insight: %s", e)
+            insight_text = "Erro ao conectar com o motor de IA."
+
+    # ── 10. CVE enrichment ────────────────────────────────────────────────────
+    cve_report = build_cve_report(trivy_data, semgrep_data)
+
+    # ── 11. Persiste findings ─────────────────────────────────────────────────
+    if is_vulnerable:
+        _persist_findings_from_scan(
+            repo_url=repo_url, sha="background",
+            semgrep_data=semgrep_data, trivy_data=trivy_data,
+            gitleaks_data=gitleaks_data, checkov_data=checkov_data,
+        )
+
+    REPO_SCANS[scan_id]["data"] = {
+        "vulnerable":      is_vulnerable,
+        "severity":        severity,
+        "scan_status":     scan_status_v,
+        "scanner_results": {
+            "semgrep":  semgrep_data,
+            "trivy":    trivy_data,
+            "gitleaks": gitleaks_data,
+            "checkov":  checkov_data,
+        },
+        "counts":          counts,
+        "tool_errors":     tool_errors,
+        "cve_report":      cve_report,
+        "ai_insight":      insight_text,
+        "scanned_paths":   scan_paths or [],
+        "tools_used":      [t for t in ["semgrep", "trivy", "gitleaks", "checkov"] if t not in tool_errors],
+        "analyzed_at":     datetime.now(timezone.utc).isoformat(),
+    }
+    REPO_SCANS[scan_id]["status"] = "CONCLUÍDO"
+    logger.info("[SAST Background] Scan %s finalizado — vulnerable=%s", scan_id, is_vulnerable)
 
 @router.post(
     "/schedule",
@@ -687,7 +785,7 @@ async def scan_repo_schedule(
     # Enfileira task (Se fosse 1H ou 24H, poderiamos usar apscheduler,
     # mas para MVP a execução principal ocorre via task simples e 
     # o status CONCLUÍDO fica em memória).
-    background_tasks.add_task(run_background_repo_scan, scan_id, body.repo_url, x_gemini_key, body.ai_summary_level)
+    background_tasks.add_task(run_background_repo_scan, scan_id, body.repo_url, x_gemini_key, body.ai_summary_level, body.scan_paths)
     
     return {
         "scan_id": scan_id,
