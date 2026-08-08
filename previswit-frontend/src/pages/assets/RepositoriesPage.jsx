@@ -222,7 +222,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
     }
 
     try {
-      const geminiKey = sessionStorage.getItem('X-Gemini-Key') || '';
+      const geminiKey = sessionStorage.getItem('gemini_api_key') || '';
       const res = await fetch(`${API}/sast/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
@@ -295,7 +295,7 @@ Para cada achado responda:
 Seja técnico, objetivo e responda em português.`;
 
     try {
-      const geminiKey = sessionStorage.getItem('X-Gemini-Key') || '';
+      const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
       const res = await fetch(`${API}/ai/insight`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
