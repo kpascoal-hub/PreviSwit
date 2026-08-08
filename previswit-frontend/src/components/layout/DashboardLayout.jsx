@@ -1,10 +1,131 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   ShieldAlert, LayoutDashboard, Server, Workflow, TerminalSquare,
   BrainCircuit, TrendingUp, FileText, Puzzle, Settings, LogOut,
   GitBranch, Cloud, Box, Monitor, Globe, ChevronDown,
+  CheckCircle, AlertTriangle, X, Terminal,
 } from 'lucide-react';
+
+// ── Global Scan Monitor ───────────────────────────────────────────────────────
+// Tracks scans started from any panel, shows notifications when they complete.
+
+const PENDING_SCANS_KEY = 'previswit_pending_scans';
+
+function ScanMonitor() {
+  const [notifications, setNotifications] = useState([]);
+  const activeRef = useRef([]);
+
+  // Sync active scans from localStorage whenever it changes
+  const syncActive = () => {
+    try {
+      return JSON.parse(localStorage.getItem(PENDING_SCANS_KEY) || '[]');
+    } catch { return []; }
+  };
+
+  useEffect(() => {
+    const poll = async () => {
+      const scans = syncActive();
+      activeRef.current = scans;
+      if (scans.length === 0) return;
+
+      const newNotifs = [];
+      for (const scan of scans) {
+        try {
+          const res = await fetch(`/api/v1/sast/scan-status/${scan.scanId}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          const done = data.status === 'CONCLUÍDO' || data.status === 'ERROR';
+          if (done) {
+            // Remove from pending
+            const remaining = syncActive().filter(s => s.scanId !== scan.scanId);
+            localStorage.setItem(PENDING_SCANS_KEY, JSON.stringify(remaining));
+            // Save result
+            if (data.data) {
+              localStorage.setItem('previswit_sast_current_view',
+                JSON.stringify({ target: scan.repoName, data: data.data }));
+            }
+            newNotifs.push({
+              id: scan.scanId,
+              repoName: scan.repoName,
+              status: data.status,
+              vulnerable: data.data?.vulnerable,
+              error: data.error,
+            });
+          }
+        } catch {}
+      }
+      if (newNotifs.length > 0) {
+        setNotifications(prev => [...prev, ...newNotifs]);
+      }
+    };
+
+    const iv = setInterval(poll, 5000);
+    poll(); // immediate first check
+    return () => clearInterval(iv);
+  }, []);
+
+  const dismiss = (id) => setNotifications(prev => prev.filter(n => n.id !== id));
+  const activeCount = syncActive().length;
+
+  return (
+    <>
+      {/* Floating "scan running" chip */}
+      {activeCount > 0 && (
+        <div className="fixed top-4 right-4 z-[300] flex items-center gap-2 px-3 py-1.5
+                        bg-[#0d1421]/95 border border-blue-500/30 rounded-full text-xs text-blue-300
+                        shadow-lg shadow-blue-500/10 backdrop-blur-md">
+          <Terminal className="w-3 h-3" />
+          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+          {activeCount} scan{activeCount > 1 ? 's' : ''} em andamento
+        </div>
+      )}
+
+      {/* Notifications stack */}
+      {notifications.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-[400] flex flex-col gap-2 max-w-xs">
+          {notifications.map(n => {
+            const isError = n.status === 'ERROR';
+            const isVuln  = !isError && n.vulnerable === true;
+            const isClean = !isError && n.vulnerable === false;
+            return (
+              <div key={n.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border
+                                          backdrop-blur-md animate-in slide-in-from-bottom-2 ${
+                isError ? 'bg-[#1a0808]/95 border-red-500/30 text-red-200' :
+                isVuln  ? 'bg-[#1a0d0d]/95 border-orange-500/30 text-white' :
+                          'bg-[#0d1a0d]/95 border-emerald-500/30 text-white'
+              }`}>
+                <div className={`p-1.5 rounded-lg shrink-0 ${
+                  isError ? 'bg-red-500/20' : isVuln ? 'bg-orange-500/20' : 'bg-emerald-500/20'
+                }`}>
+                  {isError
+                    ? <AlertTriangle className="w-4 h-4 text-red-400" />
+                    : isVuln
+                      ? <AlertTriangle className="w-4 h-4 text-orange-400" />
+                      : <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold leading-none">
+                    {isError ? 'Scan falhou' : isVuln ? '⚠️ Vulnerabilidades' : '🛡️ Código seguro'}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-1 truncate">{n.repoName}</p>
+                  {isError && n.error && (
+                    <p className="text-[10px] text-red-400 mt-0.5 truncate">{n.error}</p>
+                  )}
+                </div>
+                <button onClick={() => dismiss(n.id)}
+                  className="text-gray-500 hover:text-white transition-colors shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
 
 // ── Shared nav-item style ─────────────────────────────────────────────────────
 const activeClass   = 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
@@ -143,6 +264,7 @@ export default function DashboardLayout({ setIsAuthenticated }) {
 
   return (
     <div className="flex h-screen w-full bg-[#060b13] text-gray-200 overflow-hidden">
+      <ScanMonitor />
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <aside className="w-64 border-r border-white/5 flex flex-col bg-[#060b13]/80 backdrop-blur-xl shrink-0">

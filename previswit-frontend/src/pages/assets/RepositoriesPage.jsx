@@ -29,9 +29,28 @@ function langColor(lang) {
 
 // ── SastScanPanel ─────────────────────────────────────────────────────────────
 
+const PENDING_SCANS_KEY = 'previswit_pending_scans';
+
+function savePendingScan(scanId, repoName, repoOwner) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(PENDING_SCANS_KEY) || '[]');
+    const filtered = existing.filter(s => s.repoName !== repoName); // replace if re-scan
+    filtered.push({ scanId, repoName, repoOwner, startedAt: Date.now() });
+    localStorage.setItem(PENDING_SCANS_KEY, JSON.stringify(filtered));
+  } catch {}
+}
+
+function removePendingScan(scanId) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(PENDING_SCANS_KEY) || '[]');
+    localStorage.setItem(PENDING_SCANS_KEY, JSON.stringify(existing.filter(s => s.scanId !== scanId)));
+  } catch {}
+}
+
 function SastScanPanel({ repo, onClose, onScanComplete }) {
-  const repoUrl = `https://github.com/${repo.name}.git`;
-  const [owner, repoName] = (repo.name || '').split('/');
+  const owner   = repo.owner || '';
+  const repoName = repo.name || '';
+  const repoUrl = `https://github.com/${owner}/${repoName}.git`;
 
   // Config state
   const [scope, setScope] = useState('full');          // 'full' | 'specific'
@@ -77,7 +96,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
     setLoadingTree(true);
     try {
       const res = await fetch(
-        `https://api.github.com/repos/${owner}/${repoName}/contents/`,
+        `https://api.github.com/repos/${owner}/${repoName}/contents`,
         { headers: { Authorization: `token ${token}` } },
       );
       if (res.ok) {
@@ -111,10 +130,12 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
               setScanData(d.data);
               setActiveTab('results');
               localStorage.setItem('previswit_sast_current_view',
-                JSON.stringify({ target: repo.name, data: d.data }));
-              if (onScanComplete) onScanComplete(repo.name, d.data);
+                JSON.stringify({ target: repoName, data: d.data }));
+              removePendingScan(scanId);
+              if (onScanComplete) onScanComplete(repoName, d.data);
               clearInterval(iv);
             } else if (d.status === 'ERROR') {
+              removePendingScan(scanId);
               clearInterval(iv);
             }
           }
@@ -157,6 +178,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
         const d = await res.json();
         setScanId(d.scan_id);
         setActiveTab('results');
+        savePendingScan(d.scan_id, repoName, owner);
       } else {
         setScanStatus('ERROR');
       }

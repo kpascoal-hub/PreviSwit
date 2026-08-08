@@ -559,7 +559,10 @@ def run_background_repo_scan(
             capture_output=True, text=True, check=False,
         )
         if clone.returncode != 0:
-            raise RuntimeError(f"git clone falhou: {clone.stderr[:300]}")
+            logger.error("[SAST Background] git clone falhou para %s: %s", repo_url, clone.stderr[:200])
+            REPO_SCANS[scan_id]["status"] = "ERROR"
+            REPO_SCANS[scan_id]["error"] = f"git clone falhou: {clone.stderr[:200]}"
+            return
 
         # ── 2. Determinar targets de scan ─────────────────────────────────────
         if scan_paths:
@@ -649,6 +652,11 @@ def run_background_repo_scan(
         except Exception as e:
             tool_errors["checkov"] = str(e)
 
+    except Exception as e:
+        logger.error("[SAST Background] Erro inesperado no scan %s: %s", scan_id, e)
+        REPO_SCANS[scan_id]["status"] = "ERROR"
+        REPO_SCANS[scan_id]["error"] = str(e)
+        return
     finally:
         shutil.rmtree(diretorio_temporario, ignore_errors=True)
 
