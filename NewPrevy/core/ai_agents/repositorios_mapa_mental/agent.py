@@ -50,7 +50,7 @@ class MapaMentalAgent:
     """
 
     def __init__(self):
-        self._model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self._model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         # Cache em memória dos históricos de sessão carregados do disco
         self._session_cache: dict[str, list] = {}
 

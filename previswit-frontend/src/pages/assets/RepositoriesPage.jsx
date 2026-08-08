@@ -278,27 +278,45 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
       showToast('Configure a chave Gemini em Integrações para usar IA Insights.');
       return;
     }
+
+    const findings = extractFindings(scanData?.scanner_results);
+    if (!findings.length) { showToast('Nenhum achado HIGH/CRITICAL para analisar.'); return; }
+
     setAiInsightsLoading(true);
     setAiInsightsText('');
 
+    // Monta lista compacta dos achados (máx 10, sem campos redundantes)
+    const lines = findings.slice(0, 10).map((f, i) => {
+      let line = `${i + 1}. [${f.tool.toUpperCase()}] ${f.ruleId} | ${f.severity}`;
+      line += `\n   Local: ${f.file}${f.line ? `:${f.line}` : ''}`;
+      line += `\n   Problema: ${f.message.slice(0, 200)}`;
+      if (f.pkg)      line += `\n   Pacote: ${f.pkg} ${f.installed}${f.fixed ? ` → fix: ${f.fixed}` : ''}`;
+      if (f.resource) line += `\n   Recurso IaC: ${f.resource}`;
+      return line;
+    }).join('\n\n');
+
+    const prompt =
+`Você é um especialista AppSec analisando os resultados de um scan SAST do repositório "${repoName}".
+As ferramentas Semgrep, Trivy, Gitleaks e Checkov encontraram ${findings.length} vulnerabilidade(s) HIGH/CRITICAL:
+
+${lines}
+
+Para cada item acima, responda em português:
+1. **Real ou falso positivo?** — Justifique brevemente com base no tipo de regra e no local do arquivo.
+2. **O que exatamente está errado?** — Explique o problema no contexto daquele arquivo/linha.
+3. **Como corrigir?** — 1 a 2 passos práticos e diretos.
+
+Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do repositório completo.`;
+
     try {
-      // Usa validate-sast (gemini-2.5-flash, retry automático) em vez de ai/insight (gemini-2.0-flash)
-      const res = await fetch(`${API}/ai/validate-sast`, {
+      const res = await fetch(`${API}/ai/insight`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
-        body: JSON.stringify({
-          sha: scanData.sha || 'sast-repo-scan',
-          message: `Análise SAST — ${repo.name}`,
-          author: owner,
-          date: scanData.analyzed_at || new Date().toISOString(),
-          scanner_results: scanData.scanner_results || {},
-          files: [],
-          executive_mode: false,
-        }),
+        body: JSON.stringify({ prompt }),
       });
       if (res.ok) {
         const d = await res.json();
-        setAiInsightsText(d.analysis || '');
+        setAiInsightsText(d.response || '');
         setShowFindings(true);
       } else if (res.status === 401) {
         showToast('Configure a chave Gemini em Integrações para usar IA Insights.');
