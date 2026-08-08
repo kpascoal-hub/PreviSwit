@@ -27,6 +27,136 @@ function langColor(lang) {
   return map[lang] || '#8b949e';
 }
 
+// ── Markdown renderer (no external lib) ──────────────────────────────────────
+function MarkdownText({ text }) {
+  if (!text) return null;
+
+  const renderInline = (str, key) => {
+    const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/);
+    return parts.map((p, i) => {
+      if (p.startsWith('**') && p.endsWith('**'))
+        return <strong key={i} className="font-semibold text-white">{p.slice(2, -2)}</strong>;
+      if (p.startsWith('`') && p.endsWith('`'))
+        return <code key={i} className="text-[10px] font-mono bg-white/10 text-purple-300 px-1.5 py-0.5 rounded">{p.slice(1, -1)}</code>;
+      return p;
+    });
+  };
+
+  const lines = text.split('\n');
+  const out = [];
+  let k = 0;
+  let ul = [], ol = [];
+
+  const pushUl = () => {
+    if (!ul.length) return;
+    out.push(
+      <ul key={k++} className="my-2 space-y-1.5 pl-1">
+        {ul.map((item, j) => (
+          <li key={j} className="flex gap-2 text-[12px] text-gray-300 leading-relaxed">
+            <span className="text-indigo-400 shrink-0 mt-[3px]">•</span>
+            <span>{renderInline(item)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+    ul = [];
+  };
+
+  const pushOl = () => {
+    if (!ol.length) return;
+    out.push(
+      <ol key={k++} className="my-2 space-y-1.5 pl-1">
+        {ol.map((item, j) => (
+          <li key={j} className="flex gap-2 text-[12px] text-gray-300 leading-relaxed">
+            <span className="text-indigo-400 font-bold shrink-0 w-5 text-right">{j + 1}.</span>
+            <span>{renderInline(item)}</span>
+          </li>
+        ))}
+      </ol>
+    );
+    ol = [];
+  };
+
+  const flush = () => { pushUl(); pushOl(); };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trimStart();
+
+    // fenced code block
+    if (line.startsWith('```')) {
+      flush();
+      const lang = line.slice(3).trim();
+      const code = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        code.push(lines[i]); i++;
+      }
+      out.push(
+        <div key={k++} className="my-3 rounded-xl overflow-hidden border border-white/10">
+          {lang && (
+            <div className="px-3 py-1.5 bg-white/[0.04] border-b border-white/[0.06] text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+              {lang}
+            </div>
+          )}
+          <pre className="bg-[#0d1421] p-4 overflow-x-auto">
+            <code className="text-[11px] font-mono text-emerald-300 leading-relaxed whitespace-pre">
+              {code.join('\n')}
+            </code>
+          </pre>
+        </div>
+      );
+      i++; continue;
+    }
+
+    // horizontal rule
+    if (/^[-*]{3,}$/.test(line.trim())) {
+      flush();
+      out.push(<hr key={k++} className="my-3 border-white/[0.08]" />);
+      i++; continue;
+    }
+
+    // headings
+    if (line.startsWith('### ')) {
+      flush();
+      out.push(<h3 key={k++} className="text-[13px] font-bold text-indigo-300 mt-4 mb-1.5">{renderInline(line.slice(4))}</h3>);
+      i++; continue;
+    }
+    if (line.startsWith('## ')) {
+      flush();
+      out.push(<h2 key={k++} className="text-sm font-bold text-white mt-4 mb-1.5">{renderInline(line.slice(3))}</h2>);
+      i++; continue;
+    }
+    if (line.startsWith('# ')) {
+      flush();
+      out.push(<h1 key={k++} className="text-base font-bold text-white mt-3 mb-1.5">{renderInline(line.slice(2))}</h1>);
+      i++; continue;
+    }
+
+    // numbered list
+    const numM = line.match(/^(\d+)\.\s+(.*)/);
+    if (numM) { pushUl(); ol.push(numM[2]); i++; continue; }
+
+    // bullet list
+    const bulM = line.match(/^[*\-]\s+(.*)/);
+    if (bulM) { pushOl(); ul.push(bulM[1]); i++; continue; }
+
+    // blank line
+    if (!line.trim()) { flush(); i++; continue; }
+
+    // paragraph
+    flush();
+    out.push(
+      <p key={k++} className="text-[12px] text-gray-300 leading-relaxed my-0.5">
+        {renderInline(line)}
+      </p>
+    );
+    i++;
+  }
+  flush();
+  return <div className="space-y-0.5">{out}</div>;
+}
+
 // ── Extract structured findings from raw scanner_results ─────────────────────
 function extractFindings(sr) {
   if (!sr) return [];
@@ -822,9 +952,7 @@ Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do re
                     </div>
                     {aiInsightsText ? (
                       <div className="px-5 py-4 border-t border-indigo-500/10">
-                        <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-line">
-                          {aiInsightsText}
-                        </p>
+                        <MarkdownText text={aiInsightsText} />
                       </div>
                     ) : (
                       !aiInsightsLoading && (
@@ -850,9 +978,7 @@ Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do re
                     <p className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
                       <Zap className="w-3 h-3" />Resumo IA — {aiLevel}
                     </p>
-                    <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-line">
-                      {scanData.ai_insight}
-                    </p>
+                    <MarkdownText text={scanData.ai_insight} />
                   </div>
                 )}
 
