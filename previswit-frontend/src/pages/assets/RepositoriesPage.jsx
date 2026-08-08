@@ -273,42 +273,38 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   };
 
   const handleAiInsights = async () => {
-    const findings = extractFindings(scanData?.scanner_results);
-    if (!findings.length) { showToast('Nenhum achado HIGH/CRITICAL para analisar.'); return; }
+    const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
+    if (!geminiKey) {
+      showToast('Configure a chave Gemini em Integrações para usar IA Insights.');
+      return;
+    }
     setAiInsightsLoading(true);
     setAiInsightsText('');
 
-    const top = findings.slice(0, 12);
-    const prompt = `Você é um especialista sênior em segurança de aplicações (AppSec).
-Analise os achados SAST abaixo encontrados no repositório "${repo.name}".
-
-${top.map((f, i) => `${i + 1}. [${f.tool.toUpperCase()}] ${f.ruleId}
-   Arquivo: ${f.file}${f.line ? ` (linha ${f.line}${f.lineEnd && f.lineEnd !== f.line ? `–${f.lineEnd}` : ''})` : ''}
-   Problema: ${f.message}
-   Severidade: ${f.severity}${f.pkg ? `\n   Pacote: ${f.pkg} ${f.installed} → corrigido em ${f.fixed || 'N/D'}` : ''}${f.resource ? `\n   Recurso: ${f.resource}` : ''}${f.match ? `\n   Match: ${f.match}` : ''}`).join('\n\n')}
-
-Para cada achado responda:
-1. É vulnerabilidade real ou falso positivo? (justifique em 1 linha)
-2. Onde exatamente no código está o problema?
-3. Como remediar? (1–2 passos diretos)
-
-Seja técnico, objetivo e responda em português.`;
-
     try {
-      const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
-      const res = await fetch(`${API}/ai/insight`, {
+      // Usa validate-sast (gemini-2.5-flash, retry automático) em vez de ai/insight (gemini-2.0-flash)
+      const res = await fetch(`${API}/ai/validate-sast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          sha: scanData.sha || 'sast-repo-scan',
+          message: `Análise SAST — ${repo.name}`,
+          author: owner,
+          date: scanData.analyzed_at || new Date().toISOString(),
+          scanner_results: scanData.scanner_results || {},
+          files: [],
+          executive_mode: false,
+        }),
       });
       if (res.ok) {
         const d = await res.json();
-        setAiInsightsText(d.response || '');
+        setAiInsightsText(d.analysis || '');
         setShowFindings(true);
       } else if (res.status === 401) {
-        showToast('Configure a chave Gemini em Configurações para usar IA Insights.');
+        showToast('Configure a chave Gemini em Integrações para usar IA Insights.');
       } else {
-        showToast('Erro ao consultar IA. Tente novamente.');
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || 'Erro ao consultar IA. Tente novamente.');
       }
     } catch {
       showToast('Erro de conexão com o servidor.');
