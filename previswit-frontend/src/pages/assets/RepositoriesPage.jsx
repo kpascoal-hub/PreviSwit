@@ -5,7 +5,7 @@ import {
   Clock, Settings, FileText, ChevronDown, CheckCircle, Shield,
   Zap, Activity, Database, Code2, Terminal, TrendingUp, Eye,
   X, Folder, File, Plus, Minus, ChevronRight, Bug, Lock,
-  Server, Info, AlertOctagon, BrainCircuit, Sparkles,
+  Server, Info, AlertOctagon, BrainCircuit, Sparkles, Send, Upload,
 } from 'lucide-react';
 import RiskGraphCanvas from './RiskGraphCanvas';
 
@@ -214,6 +214,123 @@ function extractFindings(sr) {
   return out;
 }
 
+// ── Extract code blocks from AI response ─────────────────────────────────────
+function extractCodeBlocks(text) {
+  const blocks = [];
+  const re = /```(\w*)\n([\s\S]*?)```/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    // Try to detect file path hint from first comment line
+    const firstLine = m[2].split('\n')[0] || '';
+    const fileHint = (firstLine.match(/[#/]\s*(?:[Ff]ile|[Aa]rquivo)[:\s]+(\S+)/) ||
+                      firstLine.match(/^[#/]\s*(\S+\.\w{2,6})\s*$/))?.[1] || '';
+    blocks.push({ lang: m[1], code: m[2], fileHint });
+  }
+  return blocks;
+}
+
+// ── ChatMessage ───────────────────────────────────────────────────────────────
+function ChatMessage({ msg, onPushToGitHub, suggestedFile }) {
+  const [pushState, setPushState] = useState({});
+  // pushState[index] = { open, filePath, commitMsg, loading, done, error }
+
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] bg-indigo-600/20 border border-indigo-500/25 rounded-2xl rounded-tr-sm px-4 py-2.5">
+          <p className="text-[12px] text-white leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const blocks = msg.codeBlocks || [];
+
+  return (
+    <div className="flex gap-2.5">
+      <div className="shrink-0 w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mt-1">
+        <BrainCircuit className="w-3 h-3 text-indigo-400" />
+      </div>
+      <div className="flex-1 min-w-0 space-y-2">
+        <MarkdownText text={msg.text} />
+
+        {blocks.map((blk, bi) => {
+          const ps = pushState[bi] || {};
+          return (
+            <div key={bi}>
+              {!ps.open ? (
+                <button
+                  onClick={() => setPushState(p => ({
+                    ...p,
+                    [bi]: { open: true, filePath: blk.fileHint || suggestedFile || '', commitMsg: 'fix: security fix via PreviSwit' },
+                  }))}
+                  className="mt-1 flex items-center gap-1.5 text-[10px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 rounded-lg px-3 py-1.5 transition-all"
+                >
+                  <Upload className="w-3 h-3" />
+                  Subir correção no GitHub
+                </button>
+              ) : (
+                <div className="mt-2 p-3.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 space-y-2.5">
+                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <GitBranch className="w-3 h-3" />Subir no GitHub
+                  </p>
+                  <input
+                    value={ps.filePath || ''}
+                    onChange={e => setPushState(p => ({ ...p, [bi]: { ...ps, filePath: e.target.value } }))}
+                    placeholder="Caminho do arquivo, ex: .github/workflows/sast.yml"
+                    className="w-full bg-[#0d1421] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-600 focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <input
+                    value={ps.commitMsg || ''}
+                    onChange={e => setPushState(p => ({ ...p, [bi]: { ...ps, commitMsg: e.target.value } }))}
+                    placeholder="Mensagem do commit"
+                    className="w-full bg-[#0d1421] border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-600 focus:outline-none focus:border-emerald-500/50"
+                  />
+                  {ps.done && (
+                    <p className="text-[11px] text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" />Enviado com sucesso!
+                    </p>
+                  )}
+                  {ps.error && (
+                    <p className="text-[11px] text-red-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5" />{ps.error}
+                    </p>
+                  )}
+                  {!ps.done && (
+                    <div className="flex gap-2">
+                      <button
+                        disabled={ps.loading || !ps.filePath?.trim()}
+                        onClick={async () => {
+                          setPushState(p => ({ ...p, [bi]: { ...ps, loading: true, error: null } }));
+                          try {
+                            await onPushToGitHub(blk.code, ps.filePath.trim(), ps.commitMsg || 'fix: security fix via PreviSwit');
+                            setPushState(p => ({ ...p, [bi]: { ...ps, loading: false, done: true } }));
+                          } catch (e) {
+                            setPushState(p => ({ ...p, [bi]: { ...ps, loading: false, error: e.message } }));
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {ps.loading
+                          ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Enviando…</>
+                          : <><GitBranch className="w-3 h-3" />Confirmar envio</>}
+                      </button>
+                      <button
+                        onClick={() => setPushState(p => ({ ...p, [bi]: { open: false } }))}
+                        className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-white transition-all"
+                      >Cancelar</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── SastScanPanel ─────────────────────────────────────────────────────────────
 
 const PENDING_SCANS_KEY = 'previswit_pending_scans';
@@ -261,6 +378,13 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const [showFindings, setShowFindings] = useState(false);
   const [aiInsightsText, setAiInsightsText] = useState('');
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+
+  // Chat state
+  const [showChat, setShowChat] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const chatBottomRef = useRef(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
@@ -458,6 +582,98 @@ Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do re
       showToast('Erro de conexão com o servidor.');
     }
     setAiInsightsLoading(false);
+  };
+
+  // ── GitHub push ────────────────────────────────────────────────────────────
+  const pushFileToGitHub = async (code, filePath, commitMsg) => {
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+    if (!token) throw new Error('Token GitHub não encontrado. Configure em Integrações.');
+
+    const cleanPath = filePath.replace(/^\//, '');
+    const apiBase  = `https://api.github.com/repos/${owner}/${repoName}/contents/${cleanPath}`;
+    const headers  = { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' };
+
+    // Get current SHA (required to update existing file)
+    let sha;
+    const getRes = await fetch(apiBase, { headers });
+    if (getRes.ok) { sha = (await getRes.json()).sha; }
+    else if (getRes.status !== 404) throw new Error(`Erro ao verificar arquivo (${getRes.status})`);
+
+    // Base64-encode UTF-8 content
+    const bytes  = new TextEncoder().encode(code);
+    const binary = Array.from(bytes).map(b => String.fromCharCode(b)).join('');
+    const content = btoa(binary);
+
+    const putRes = await fetch(apiBase, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ message: commitMsg, content, ...(sha ? { sha } : {}), branch: 'main' }),
+    });
+    if (!putRes.ok) {
+      const err = await putRes.json().catch(() => ({}));
+      throw new Error(err.message || `Erro ${putRes.status} ao enviar arquivo`);
+    }
+  };
+
+  // ── Chat with AI ────────────────────────────────────────────────────────────
+  const handleChatSend = async () => {
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
+    if (!geminiKey) { showToast('Configure a chave Gemini em Integrações.'); return; }
+
+    setChatInput('');
+    const userMsg = { id: Date.now(), role: 'user', text };
+    const history = [...chatMsgs, userMsg];
+    setChatMsgs(history);
+    setChatSending(true);
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+    const findings = extractFindings(scanData?.scanner_results);
+    const summary  = findings.slice(0, 6).map(f =>
+      `- [${f.tool}] ${f.ruleId} em ${f.file}${f.line ? `:${f.line}` : ''}: ${f.message.slice(0, 120)}`
+    ).join('\n');
+
+    const historyText = chatMsgs.slice(-6).map(m =>
+      `${m.role === 'user' ? 'Usuário' : 'IA'}: ${m.text.slice(0, 300)}`
+    ).join('\n');
+
+    const wantsFix  = /corri[jg]|fix|arruma|sobe|github|push|commit|altera/i.test(text);
+    const fixHint   = wantsFix
+      ? '\nSe for pedido de correção de código, forneça o arquivo completo corrigido em um bloco de código markdown, com o caminho do arquivo na primeira linha como comentário (ex: `# .github/workflows/sast.yml`).'
+      : '';
+
+    const prompt =
+`Você é um especialista AppSec no repositório "${repoName}".
+
+Achados SAST detectados:
+${summary || 'Nenhum achado HIGH/CRITICAL.'}
+${chatMsgs.length ? `\nHistórico:\n${historyText}` : ''}
+
+Mensagem: ${text}
+${fixHint}
+Responda em português, seja técnico e direto.`;
+
+    try {
+      const res = await fetch(`${API}/ai/insight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
+        body: JSON.stringify({ prompt }),
+      });
+      if (res.ok) {
+        const d   = await res.json();
+        const raw = d.response || '';
+        setChatMsgs(prev => [...prev, {
+          id: Date.now() + 1,
+          role: 'ai',
+          text: raw,
+          codeBlocks: extractCodeBlocks(raw),
+        }]);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      } else {
+        showToast('Erro ao consultar IA.');
+      }
+    } catch { showToast('Erro de conexão.'); }
+    setChatSending(false);
   };
 
   const togglePath = (path) => {
@@ -971,6 +1187,73 @@ Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do re
                     )}
                   </div>
                 )}
+
+                {/* ── Chat com IA ─────────────────────────────────── */}
+                <div className="rounded-xl border border-white/[0.07] overflow-hidden">
+                  <button
+                    onClick={() => setShowChat(p => !p)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] hover:bg-white/[0.05] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <BrainCircuit className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-semibold text-white">Chat com IA</span>
+                      <span className="text-[10px] text-gray-500">Pergunte, peça correções e suba pro GitHub</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showChat ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showChat && (
+                    <div className="border-t border-white/[0.05]">
+                      {/* Messages */}
+                      <div className="max-h-[26rem] overflow-y-auto p-4 space-y-4">
+                        {chatMsgs.length === 0 && (
+                          <p className="text-[11px] text-gray-600 text-center py-6">
+                            Pergunte sobre as vulnerabilidades, peça uma correção ou diga<br />
+                            <span className="text-indigo-400">"corrija o arquivo X e suba pro GitHub"</span>
+                          </p>
+                        )}
+                        {chatMsgs.map(msg => (
+                          <ChatMessage
+                            key={msg.id}
+                            msg={msg}
+                            onPushToGitHub={pushFileToGitHub}
+                            suggestedFile={extractFindings(scanData.scanner_results)[0]?.file || ''}
+                          />
+                        ))}
+                        {chatSending && (
+                          <div className="flex gap-2.5 items-center">
+                            <div className="shrink-0 w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                              <BrainCircuit className="w-3 h-3 text-indigo-400" />
+                            </div>
+                            <span className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                              <span className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                              Pensando…
+                            </span>
+                          </div>
+                        )}
+                        <div ref={chatBottomRef} />
+                      </div>
+
+                      {/* Input bar */}
+                      <div className="p-3 border-t border-white/[0.05] flex gap-2">
+                        <input
+                          value={chatInput}
+                          onChange={e => setChatInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                          placeholder="Ex: corrija a permissão write-all e suba pro GitHub…"
+                          className="flex-1 bg-[#0d1421] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                        />
+                        <button
+                          onClick={handleChatSend}
+                          disabled={!chatInput.trim() || chatSending}
+                          className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* AI Insight summary (from scan) */}
                 {scanData.ai_insight && (
