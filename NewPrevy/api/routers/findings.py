@@ -7,7 +7,7 @@ from typing import List, Optional
 import json
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/findings", tags=["Findings & Triage"])
 
@@ -36,9 +36,13 @@ def _enrich_sla(finding: dict) -> dict:
     """Calcula e adiciona informações de SLA ao finding."""
     severity = finding.get("severity", "LOW").upper()
     sla_days = SLA_DAYS.get(severity, 180)
-    created = datetime.fromisoformat(finding.get("created_at", datetime.utcnow().isoformat()))
+    now = datetime.now(timezone.utc)
+    raw = finding.get("created_at", now.isoformat())
+    created = datetime.fromisoformat(raw)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
     deadline = created + timedelta(days=sla_days)
-    days_remaining = (deadline - datetime.utcnow()).days
+    days_remaining = (deadline - now).days
     finding["sla"] = {
         "deadline": deadline.isoformat(),
         "days_remaining": days_remaining,
