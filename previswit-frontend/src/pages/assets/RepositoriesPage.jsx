@@ -5,7 +5,7 @@ import {
   Clock, Settings, FileText, ChevronDown, CheckCircle, Shield,
   Zap, Activity, Database, Code2, Terminal, TrendingUp, Eye,
   X, Folder, File, Plus, Minus, ChevronRight, Bug, Lock,
-  Server, Info, AlertOctagon,
+  Server, Info, AlertOctagon, BrainCircuit, Sparkles,
 } from 'lucide-react';
 import RiskGraphCanvas from './RiskGraphCanvas';
 
@@ -25,6 +25,63 @@ function langColor(lang) {
     C: '#555555', 'C++': '#f34b7d', 'C#': '#178600', PHP: '#4F5D95',
   };
   return map[lang] || '#8b949e';
+}
+
+// ── Extract structured findings from raw scanner_results ─────────────────────
+function extractFindings(sr) {
+  if (!sr) return [];
+  const out = [];
+  const strip = p => (p || '—').replace(/^\/tmp\/[^/]+\//, '');
+
+  // Semgrep
+  for (const r of (sr.semgrep?.results || [])) {
+    const sev = (r.extra?.severity || 'MEDIUM').toUpperCase();
+    if (!['HIGH', 'CRITICAL'].includes(sev)) continue;
+    out.push({
+      tool: 'semgrep', ruleId: r.check_id || '—',
+      file: strip(r.path), line: r.start?.line, lineEnd: r.end?.line,
+      message: r.extra?.message || '—', severity: sev,
+    });
+  }
+
+  // Trivy
+  for (const result of (sr.trivy?.Results || [])) {
+    for (const v of (result.Vulnerabilities || [])) {
+      const sev = (v.Severity || 'MEDIUM').toUpperCase();
+      if (!['HIGH', 'CRITICAL'].includes(sev)) continue;
+      out.push({
+        tool: 'trivy', ruleId: v.VulnerabilityID || '—',
+        file: result.Target || '—', line: null, lineEnd: null,
+        message: v.Title || v.Description || '—', severity: sev,
+        pkg: v.PkgName, installed: v.InstalledVersion, fixed: v.FixedVersion,
+        description: v.Description,
+      });
+    }
+  }
+
+  // Gitleaks
+  for (const leak of (Array.isArray(sr.gitleaks) ? sr.gitleaks : [])) {
+    out.push({
+      tool: 'gitleaks', ruleId: leak.RuleID || '—',
+      file: strip(leak.File), line: leak.StartLine, lineEnd: null,
+      message: leak.Description || 'Segredo exposto', severity: 'HIGH',
+      match: leak.Match ? `${String(leak.Match).slice(0, 50)}…` : undefined,
+    });
+  }
+
+  // Checkov
+  const checkovList = Array.isArray(sr.checkov) ? sr.checkov : [sr.checkov].filter(Boolean);
+  for (const rep of checkovList) {
+    for (const ch of (rep?.results?.failed_checks || [])) {
+      out.push({
+        tool: 'checkov', ruleId: ch.check_id || '—',
+        file: strip(ch.file_path), line: ch.file_line_range?.[0], lineEnd: ch.file_line_range?.[1],
+        message: ch.check_name || '—', severity: 'HIGH',
+        resource: ch.resource,
+      });
+    }
+  }
+  return out;
 }
 
 // ── SastScanPanel ─────────────────────────────────────────────────────────────
@@ -71,6 +128,9 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const [activeTab, setActiveTab] = useState('config');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showFindings, setShowFindings] = useState(false);
+  const [aiInsightsText, setAiInsightsText] = useState('');
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
@@ -210,6 +270,50 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
         : 'Erro ao salvar relatório.');
     } catch { showToast('Erro ao salvar relatório.'); }
     setIsGeneratingPdf(false);
+  };
+
+  const handleAiInsights = async () => {
+    const findings = extractFindings(scanData?.scanner_results);
+    if (!findings.length) { showToast('Nenhum achado HIGH/CRITICAL para analisar.'); return; }
+    setAiInsightsLoading(true);
+    setAiInsightsText('');
+
+    const top = findings.slice(0, 12);
+    const prompt = `Você é um especialista sênior em segurança de aplicações (AppSec).
+Analise os achados SAST abaixo encontrados no repositório "${repo.name}".
+
+${top.map((f, i) => `${i + 1}. [${f.tool.toUpperCase()}] ${f.ruleId}
+   Arquivo: ${f.file}${f.line ? ` (linha ${f.line}${f.lineEnd && f.lineEnd !== f.line ? `–${f.lineEnd}` : ''})` : ''}
+   Problema: ${f.message}
+   Severidade: ${f.severity}${f.pkg ? `\n   Pacote: ${f.pkg} ${f.installed} → corrigido em ${f.fixed || 'N/D'}` : ''}${f.resource ? `\n   Recurso: ${f.resource}` : ''}${f.match ? `\n   Match: ${f.match}` : ''}`).join('\n\n')}
+
+Para cada achado responda:
+1. É vulnerabilidade real ou falso positivo? (justifique em 1 linha)
+2. Onde exatamente no código está o problema?
+3. Como remediar? (1–2 passos diretos)
+
+Seja técnico, objetivo e responda em português.`;
+
+    try {
+      const geminiKey = sessionStorage.getItem('X-Gemini-Key') || '';
+      const res = await fetch(`${API}/ai/insight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
+        body: JSON.stringify({ prompt }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setAiInsightsText(d.response || '');
+        setShowFindings(true);
+      } else if (res.status === 401) {
+        showToast('Configure a chave Gemini em Configurações para usar IA Insights.');
+      } else {
+        showToast('Erro ao consultar IA. Tente novamente.');
+      }
+    } catch {
+      showToast('Erro de conexão com o servidor.');
+    }
+    setAiInsightsLoading(false);
   };
 
   const togglePath = (path) => {
@@ -599,11 +703,138 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
                   })}
                 </div>
 
-                {/* AI Insight */}
+                {/* ── Achados Detalhados ──────────────────────────────── */}
+                {(() => {
+                  const findings = extractFindings(scanData.scanner_results);
+                  if (!findings.length) return null;
+                  const TC = {
+                    semgrep:  { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+                    trivy:    { text: 'text-sky-400',    bg: 'bg-sky-500/10',    border: 'border-sky-500/20' },
+                    gitleaks: { text: 'text-rose-400',   bg: 'bg-rose-500/10',   border: 'border-rose-500/20' },
+                    checkov:  { text: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20' },
+                  };
+                  const SC = {
+                    CRITICAL: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
+                    HIGH:     'text-red-400 bg-red-500/15 border-red-500/25',
+                    MEDIUM:   'text-amber-400 bg-amber-500/15 border-amber-500/25',
+                    LOW:      'text-blue-400 bg-blue-500/15 border-blue-500/25',
+                  };
+                  return (
+                    <div className="rounded-xl border border-white/[0.07] overflow-hidden">
+                      <button
+                        onClick={() => setShowFindings(p => !p)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] hover:bg-white/[0.05] transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Bug className="w-4 h-4 text-red-400" />
+                          <span className="text-xs font-semibold text-white">Achados Detalhados</span>
+                          <span className="text-[10px] bg-red-500/15 text-red-400 border border-red-500/25 rounded-full px-2 py-0.5">
+                            {findings.length} {findings.length === 1 ? 'achado' : 'achados'} HIGH/CRITICAL
+                          </span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showFindings ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showFindings && (
+                        <div className="divide-y divide-white/[0.04]">
+                          {findings.map((f, i) => {
+                            const tc = TC[f.tool] || TC.checkov;
+                            const sc = SC[f.severity] || SC.LOW;
+                            return (
+                              <div key={i} className="px-4 py-3.5 hover:bg-white/[0.02] transition-colors">
+                                <div className="flex items-start gap-2.5">
+                                  <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border mt-0.5 ${tc.bg} ${tc.text} ${tc.border}`}>
+                                    {f.tool}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[11px] font-mono font-semibold text-gray-200">
+                                        {f.ruleId}
+                                      </span>
+                                      <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${sc}`}>
+                                        {f.severity}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 font-mono mt-0.5 truncate">
+                                      📄 {f.file}{f.line ? `:${f.line}${f.lineEnd && f.lineEnd !== f.line ? `–${f.lineEnd}` : ''}` : ''}
+                                    </p>
+                                    <p className="text-[11px] text-gray-300 mt-1 leading-relaxed">{f.message}</p>
+                                    {f.pkg && (
+                                      <p className="text-[10px] text-gray-600 mt-0.5">
+                                        Pacote: <span className="text-gray-400 font-mono">{f.pkg}</span> {f.installed}
+                                        {f.fixed && <> → <span className="text-emerald-400 font-mono">corrigido: {f.fixed}</span></>}
+                                      </p>
+                                    )}
+                                    {f.resource && (
+                                      <p className="text-[10px] text-gray-600 mt-0.5">
+                                        Recurso: <span className="text-gray-400 font-mono">{f.resource}</span>
+                                      </p>
+                                    )}
+                                    {f.match && (
+                                      <p className="text-[10px] text-rose-400/70 font-mono mt-0.5 break-all">{f.match}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── IA Insights ─────────────────────────────────────── */}
+                {scanData.vulnerable && (
+                  <div className="rounded-xl border border-indigo-500/20 overflow-hidden">
+                    <div className="px-4 py-3 bg-indigo-500/[0.06] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <BrainCircuit className="w-4 h-4 text-indigo-400" />
+                        <span className="text-xs font-semibold text-white">IA Insights</span>
+                        <span className="text-[10px] text-indigo-400/60">Análise técnica por achado</span>
+                      </div>
+                      <button
+                        onClick={handleAiInsights}
+                        disabled={aiInsightsLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                                   bg-indigo-600 hover:bg-indigo-500 text-white transition-all
+                                   disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
+                      >
+                        {aiInsightsLoading
+                          ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Analisando…</>
+                          : <><Sparkles className="w-3 h-3" />Analisar com IA</>
+                        }
+                      </button>
+                    </div>
+                    {aiInsightsText ? (
+                      <div className="px-5 py-4 border-t border-indigo-500/10">
+                        <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-line">
+                          {aiInsightsText}
+                        </p>
+                      </div>
+                    ) : (
+                      !aiInsightsLoading && (
+                        <div className="px-4 py-4 border-t border-white/[0.04]">
+                          <p className="text-[11px] text-gray-600 text-center">
+                            Clique em "Analisar com IA" — a Gemini vai dizer se cada achado é real, onde está no código e como remediar.
+                          </p>
+                        </div>
+                      )
+                    )}
+                    {aiInsightsLoading && (
+                      <div className="px-4 py-6 border-t border-white/[0.04] flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs text-gray-500">Gemini está analisando os achados…</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* AI Insight summary (from scan) */}
                 {scanData.ai_insight && (
                   <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
                     <p className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
-                      <Zap className="w-3 h-3" />AI Insight — {aiLevel}
+                      <Zap className="w-3 h-3" />Resumo IA — {aiLevel}
                     </p>
                     <p className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-line">
                       {scanData.ai_insight}
