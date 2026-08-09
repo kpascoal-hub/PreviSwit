@@ -447,10 +447,11 @@ export default function EngagementsPage() {
     addLog(`Iniciando ${pipelineMeta?.label || pipeline} em: ${target}`, 'system');
     addLog(`Modo: ${mode === 'hot' ? 'Gêmeo Efêmero (DESTRUTIVO)' : 'Carga Seca (Produção)'}`, mode === 'hot' ? 'warn' : 'system');
 
+    const PIPELINE_MAP = { p1: '1', p2: '2', p3: 'all' };
     wsRef.current.send(JSON.stringify({
       action:   'START_SCAN',
       target:   target.trim(),
-      pipeline: pipeline,
+      pipeline: PIPELINE_MAP[pipeline] || pipeline,
       mode:     mode,
     }));
   };

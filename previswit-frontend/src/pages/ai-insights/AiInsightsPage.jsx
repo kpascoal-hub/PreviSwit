@@ -16,7 +16,7 @@ import {
   BrainCircuit, ShieldAlert, Code2, Copy, Check,
   ChevronDown, Send, Bot, User, AlertTriangle,
   DollarSign, FileText, TrendingUp, Sparkles,
-  Loader2, ChevronRight, Trash2,
+  Loader2, ChevronRight, Trash2, RefreshCw,
 } from 'lucide-react';
 
 
@@ -230,6 +230,78 @@ function PatchBlock({ code }) {
   );
 }
 
+// ── Componente: MarkdownText ──────────────────────────────────────────────────
+
+function parseInline(line) {
+  const parts = [];
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = regex.exec(line)) !== null) {
+    if (m.index > last) parts.push(line.slice(last, m.index));
+    const token = m[0];
+    if (token.startsWith('**')) {
+      parts.push(<strong key={m.index} className="font-bold text-white">{token.slice(2, -2)}</strong>);
+    } else {
+      parts.push(<code key={m.index} className="px-1 py-0.5 rounded bg-white/[0.08] font-mono text-[10px] text-cyan-300">{token.slice(1, -1)}</code>);
+    }
+    last = m.index + token.length;
+  }
+  if (last < line.length) parts.push(line.slice(last));
+  return parts.length > 1 ? parts : line;
+}
+
+function MarkdownText({ text }) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+      elements.push(
+        <div key={`cb-${i}`} className="my-2 rounded-lg overflow-hidden border border-white/[0.08]">
+          {lang && <div className="px-3 py-1 text-[9px] font-mono text-gray-500 bg-[#030710]/80 border-b border-white/[0.05]">{lang}</div>}
+          <pre className="p-3 text-[10px] font-mono text-gray-300 bg-[#060b13] overflow-x-auto whitespace-pre">{codeLines.join('\n')}</pre>
+        </div>
+      );
+      i++; continue;
+    }
+    if (/^---+$/.test(line.trim())) {
+      elements.push(<hr key={i} className="border-white/[0.06] my-2" />);
+      i++; continue;
+    }
+    if (/^#{1,3} /.test(line)) {
+      const lvl = line.match(/^(#+)/)[1].length;
+      const content = line.replace(/^#+\s*/, '');
+      const cls = lvl === 1 ? 'text-sm font-bold text-white mt-2 mb-0.5' : lvl === 2 ? 'text-xs font-bold text-white mt-2 mb-0.5' : 'text-[11px] font-semibold text-gray-300 mt-1.5';
+      elements.push(<p key={i} className={cls}>{parseInline(content)}</p>);
+      i++; continue;
+    }
+    if (line.trim() === '') {
+      elements.push(<div key={i} className="h-1.5" />);
+      i++; continue;
+    }
+    const bulletMatch = line.match(/^[-*] (.+)/);
+    const numMatch = line.match(/^\d+\. (.+)/);
+    if (bulletMatch) {
+      elements.push(<div key={i} className="flex gap-1.5 text-xs text-gray-300"><span className="text-gray-600 shrink-0">•</span><span>{parseInline(bulletMatch[1])}</span></div>);
+      i++; continue;
+    }
+    if (numMatch) {
+      const num = line.match(/^(\d+)\./)[1];
+      elements.push(<div key={i} className="flex gap-1.5 text-xs text-gray-300"><span className="text-gray-600 shrink-0 w-4">{num}.</span><span>{parseInline(numMatch[1])}</span></div>);
+      i++; continue;
+    }
+    elements.push(<p key={i} className="text-xs leading-relaxed text-gray-300">{parseInline(line)}</p>);
+    i++;
+  }
+  return <div className="space-y-0.5">{elements}</div>;
+}
+
 // ── Componente: Chat Bubble ───────────────────────────────────────────────────
 
 function ChatBubble({ msg }) {
@@ -249,7 +321,7 @@ function ChatBubble({ msg }) {
                        ${isUser
                          ? 'bg-blue-600/20 border border-blue-500/20 text-blue-100 rounded-br-sm'
                          : 'bg-white/[0.05] border border-white/[0.08] text-gray-200 rounded-bl-sm'}`}>
-        {msg.content}
+        {isUser ? msg.content : <MarkdownText text={msg.content} />}
         <p className={`text-[9px] mt-1 ${isUser ? 'text-blue-400/60 text-right' : 'text-gray-600'}`}>
           {msg.time}
         </p>
@@ -272,32 +344,37 @@ export default function AiInsightsPage() {
   ]);
   const [input,        setInput]        = useState('');
   const [isTyping,     setIsTyping]     = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef       = useRef(null);
 
-  // Coleta vulns da API na montagem
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/v1/findings/?page_size=500');
-        if (!res.ok) return;
-        const json = await res.json();
-        const list = (json.findings || []).map(f => ({
-          id:          f.id,
-          title:       f.title || '—',
-          severity:    f.severity || 'LOW',
-          source:      f.tags?.[0] || f.tool || 'Agent',
-          target:      f.asset_id || f.endpoint || '—',
-          description: f.description || '',
-          cve:         f.cve_id || '',
-          endpoint:    f.endpoint || '',
-        }));
-        setVulns(list);
-        if (list.length > 0) setSelectedId(list[0].id);
-      } catch (_) {}
-    })();
+  const fetchVulns = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/v1/findings/?page_size=500');
+      if (!res.ok) return;
+      const json = await res.json();
+      const list = (json.findings || []).map(f => ({
+        id:          f.id,
+        title:       f.title || '—',
+        severity:    f.severity || 'LOW',
+        source:      f.tags?.[0] || f.tool || 'Agent',
+        target:      f.asset_id || f.endpoint || '—',
+        description: f.description || '',
+        cve:         f.cve_id || '',
+        endpoint:    f.endpoint || '',
+      }));
+      setVulns(list);
+      setSelectedId(prev => {
+        if (prev && list.find(v => v.id === prev)) return prev;
+        return list.length > 0 ? list[0].id : '';
+      });
+    } catch (_) {}
+    finally { setIsRefreshing(false); }
   }, []);
+
+  useEffect(() => { fetchVulns(); }, [fetchVulns]);
 
   // Auto-scroll do chat
   useEffect(() => {
@@ -323,10 +400,6 @@ export default function AiInsightsPage() {
 
     try {
       const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
-      
-      const contextText = selected 
-        ? `[Contexto Oculto] O usuário está visualizando a seguinte vulnerabilidade: "${selected.title}" (Severidade: ${selected.severity}, Alvo: ${selected.target}). Detalhes: ${selected.description}`
-        : '';
 
       const res = await fetch('/api/v1/ai/chat', {
         method: 'POST',
@@ -335,9 +408,11 @@ export default function AiInsightsPage() {
           'X-Gemini-Key': geminiKey
         },
         body: JSON.stringify({
+          session_id: `ai_insights_${selectedId || 'general'}`,
           message: text,
-          context_findings: selected ? [selected] : [],
-          history: messages.map(m => ({ role: m.role, content: m.content }))
+          context: selected
+            ? `Vulnerabilidade: ${selected.title} (${selected.severity})\nAlvo: ${selected.target}\nDescrição: ${selected.description}`
+            : '',
         })
       });
 
@@ -366,7 +441,7 @@ export default function AiInsightsPage() {
     } finally {
       setIsTyping(false);
     }
-  }, [input, selected]);
+  }, [input, selected, selectedId]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -422,9 +497,20 @@ export default function AiInsightsPage() {
 
           {/* Seletor de Vulnerabilidade */}
           <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/80 to-[#060b13]/60 p-5">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-3">
-              Selecionar Vulnerabilidade para Análise
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                Selecionar Vulnerabilidade para Análise
+              </p>
+              <button
+                onClick={fetchVulns}
+                disabled={isRefreshing}
+                title="Atualizar dados"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-gray-500 hover:text-gray-300 hover:bg-white/[0.08] disabled:opacity-40 transition-all text-[9px]"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Atualizar
+              </button>
+            </div>
 
             {vulns.length === 0 ? (
               <div className="flex items-center gap-3 p-4 rounded-xl bg-white/[0.02] border border-dashed border-white/[0.06]">
@@ -508,7 +594,7 @@ export default function AiInsightsPage() {
         {/* ═══════════════════════════════════════════════
             COLUNA DIREITA — Chat Gemini
             ═══════════════════════════════════════════════ */}
-        <div className="flex flex-col lg:w-[40%] rounded-2xl border border-purple-500/15 bg-gradient-to-b from-[#0d1421]/90 to-[#060b13]/80 overflow-hidden min-h-[600px]">
+        <div className="flex flex-col lg:w-[40%] rounded-2xl border border-purple-500/15 bg-gradient-to-b from-[#0d1421]/90 to-[#060b13]/80 overflow-hidden h-[700px]">
 
           {/* Chat header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-purple-500/10 bg-[#030710]/70 shrink-0">
@@ -540,7 +626,7 @@ export default function AiInsightsPage() {
           </div>
 
           {/* Messages area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
             {messages.map(msg => <ChatBubble key={msg.id} msg={msg} />)}
 
             {/* Typing indicator */}

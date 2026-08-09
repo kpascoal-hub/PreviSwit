@@ -14,11 +14,13 @@ Uso: python ws_listener.py
 import os
 import sys
 import json
+import queue as _queue
 import asyncio
 import logging
 from datetime import datetime, timezone
 
 import websockets
+import core.utils as _core_utils
 
 # ─── Módulo de saúde e capacidades ────────────────────────────────────────────
 from modules.system.health import get_agent_capabilities
@@ -51,6 +53,27 @@ log = logging.getLogger("ws_listener")
 # ─── Import do pipeline (lazy) ─────────────────────────────────────────────
 # O import é feito dentro da função para evitar efeitos colaterais ao
 # carregar o módulo (ex: colorama.init, argparse, etc.).
+
+# ─── Log bridge: captura print_status → WebSocket ───────────────────────────
+_LEVEL_ICON = {
+    "INFO":    "ℹ️",
+    "SUCCESS": "✅",
+    "WARN":    "⚠️",
+    "ERROR":   "❌",
+    "CRIT":    "🔴",
+}
+
+async def _drain_log_queue(ws, log_queue: _queue.Queue, done: asyncio.Event):
+    """Drena log_queue e envia mensagens como LOG actions ao WebSocket."""
+    while not done.is_set() or not log_queue.empty():
+        try:
+            msg = log_queue.get_nowait()
+            if msg and str(msg).strip():
+                await ws.send(json.dumps({"action": "LOG", "message": str(msg)}))
+        except _queue.Empty:
+            await asyncio.sleep(0.2)
+        except Exception:
+            await asyncio.sleep(0.2)
 
 
 def _run_scan_blocking(target: str, pipeline: str = "all") -> tuple[dict, dict]:
@@ -261,7 +284,26 @@ async def handle_message(ws, raw: str):
             return
 
         # ── Modo SAFE: Scan direto no alvo ───────────────────────────────
+        response   = {}
+        log_queue  = _queue.Queue()
+        done_event = asyncio.Event()
+        _orig_ps   = _core_utils.print_status
+        drain_task = None
+
+        def _ws_print_status(msg, level="INFO"):
+            _orig_ps(msg, level)
+            text = str(msg).strip()
+            if text:
+                icon = _LEVEL_ICON.get(level, "")
+                log_queue.put(f"{icon} {text}" if icon else text)
+
+        _core_utils.print_status = _ws_print_status
+        drain_task = asyncio.ensure_future(
+            _drain_log_queue(ws, log_queue, done_event)
+        )
+
         try:
+
             # Roda o pipeline inteiro em thread separada para não
             # bloquear o event-loop e manter o WebSocket vivo.
             results, report_paths = await asyncio.to_thread(
@@ -327,6 +369,16 @@ async def handle_message(ws, raw: str):
                 "error":  str(exc),
                 "ts":     datetime.now(timezone.utc).isoformat(),
             }
+
+        finally:
+            # ── Encerra o patch e drena mensagens restantes ───────────────
+            _core_utils.print_status = _orig_ps
+            done_event.set()
+            if drain_task is not None:
+                try:
+                    await asyncio.wait_for(drain_task, timeout=2.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    drain_task.cancel()
 
         await ws.send(json.dumps(response, default=str))
 

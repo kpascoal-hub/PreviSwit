@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import SplashScreen from './SplashScreen';
 
 export default function LoginPage({ setIsAuthenticated }) {
   const [view, setView] = useState('login'); // 'login' | 'forgot'
@@ -9,6 +10,7 @@ export default function LoginPage({ setIsAuthenticated }) {
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
+  const [showSplash, setShowSplash] = useState(false);
 
   // Forgot Password State
   const [forgotEmail, setForgotEmail] = useState('');
@@ -20,9 +22,12 @@ export default function LoginPage({ setIsAuthenticated }) {
   const handleLogin = (e) => {
     e.preventDefault();
     if (loginUser === 'admin' && loginPass === 'admin') {
-      setIsAuthenticated(true);
       setLoginError(false);
-      navigate('/');
+      setShowSplash(true);
+      setTimeout(() => {
+        setIsAuthenticated(true);
+        navigate('/');
+      }, 1300);
     } else {
       setLoginError(true);
     }
@@ -63,6 +68,8 @@ export default function LoginPage({ setIsAuthenticated }) {
   };
 
   return (
+    <>
+    {showSplash && <SplashScreen />}
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#060b13]">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-[#060b13] to-[#060b13]"></div>
       <div className="glass-panel w-full max-w-md p-10 relative z-10">
@@ -146,5 +153,6 @@ export default function LoginPage({ setIsAuthenticated }) {
         )}
       </div>
     </div>
+    </>
   );
 }
