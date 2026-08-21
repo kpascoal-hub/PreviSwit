@@ -360,7 +360,7 @@ function ScanHistoryPanel({ history, onSelectEntry, selectedId }) {
   };
 
   return (
-    <div className="w-72 shrink-0 border-r border-white/[0.06] flex flex-col bg-[#060b13]/90 overflow-hidden">
+    <div className="w-72 shrink-0 rounded-2xl border border-white/[0.06] flex flex-col bg-[#060b13]/60 overflow-hidden">
       <div className="px-4 py-3 border-b border-white/[0.05] shrink-0">
         <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center gap-1.5">
           <Clock className="w-3 h-3" /> Histórico de Scans
@@ -1054,7 +1054,7 @@ Responda em português, seja técnico e direto.`;
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex gap-4 overflow-hidden p-4">
 
         {/* History panel */}
         <ScanHistoryPanel
@@ -1066,7 +1066,7 @@ Responda em português, seja técnico e direto.`;
         />
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto rounded-2xl border border-white/[0.06] bg-[#060b13]/60">
 
         {/* ===== CONFIG TAB ===== */}
         {activeTab === 'config' && (
