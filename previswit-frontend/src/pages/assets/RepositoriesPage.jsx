@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   GitBranch, ArrowLeft, Link2, RefreshCw, AlertTriangle,
@@ -351,6 +351,210 @@ function removePendingScan(scanId) {
   } catch {}
 }
 
+// ── Scan history left panel ───────────────────────────────────────────────────
+function ScanHistoryPanel({ history, onSelectEntry, selectedId }) {
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+      + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="w-52 shrink-0 border-r border-white/[0.06] flex flex-col bg-[#060b13]/90 overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/[0.05] shrink-0">
+        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center gap-1.5">
+          <Clock className="w-3 h-3" /> Histórico de Scans
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {history.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-2 px-4">
+            <Clock className="w-7 h-7 text-gray-700" />
+            <p className="text-[10px] text-gray-600 text-center leading-relaxed">
+              Nenhum scan registrado ainda.<br />Execute um scan para ver o histórico.
+            </p>
+          </div>
+        ) : history.map((entry, idx) => {
+          const isSelected = entry.id === selectedId;
+          const statusColor = entry.status === 'CONCLUÍDO'
+            ? 'text-emerald-400 bg-emerald-500/10'
+            : entry.status === 'ERROR'
+              ? 'text-red-400 bg-red-500/10'
+              : 'text-blue-400 bg-blue-500/10 animate-pulse';
+          const statusLabel = entry.status === 'CONCLUÍDO' ? '✓ Concluído'
+            : entry.status === 'ERROR' ? '✗ Erro' : '⏳ Em andamento';
+
+          return (
+            <button
+              key={entry.id}
+              onClick={() => onSelectEntry(entry)}
+              className={`w-full text-left px-4 py-3 border-b border-white/[0.04] transition-all ${
+                isSelected ? 'bg-purple-500/10 border-l-2 border-l-purple-500' : 'hover:bg-white/[0.03]'
+              }`}
+            >
+              {idx === 0 && (
+                <span className="text-[8px] font-bold uppercase tracking-wider text-purple-400 mb-1 block">
+                  Mais recente
+                </span>
+              )}
+              <p className="text-[11px] font-semibold text-gray-200">{fmt(entry.date)}</p>
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${statusColor}`}>
+                  {statusLabel}
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-gray-500/10 text-gray-400">
+                  {entry.scope === 'full' ? 'Completo' : `${(entry.paths || []).length} path(s)`}
+                </span>
+                {entry.vulnerable === true && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-red-500/10 text-red-400">
+                    Vulnerável
+                  </span>
+                )}
+              </div>
+              {entry.scope === 'specific' && (entry.paths || []).length > 0 && (
+                <div className="mt-1.5 space-y-0.5">
+                  {entry.paths.slice(0, 3).map(p => (
+                    <p key={p} className="text-[9px] text-gray-600 font-mono truncate">{p}</p>
+                  ))}
+                  {entry.paths.length > 3 && (
+                    <p className="text-[9px] text-gray-600 italic">+{entry.paths.length - 3} mais</p>
+                  )}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── VSCode-style file tree node ───────────────────────────────────────────────
+function FileTreeNode({ item, depth = 0, owner, repoName, token, selectedPaths, togglePath, scannedPaths, isFullScan, commitAlerts }) {
+  const [open, setOpen]               = useState(false);
+  const [children, setChildren]       = useState(null); // null = not fetched yet
+  const [loadingKids, setLoadingKids] = useState(false);
+
+  const isDir       = item.type === 'dir';
+  const checked     = selectedPaths.has(item.path);
+  const indent      = depth * 14 + 8;
+  const isScanned   = isFullScan || (scannedPaths && scannedPaths.has(item.path));
+  const hasNewCommit = commitAlerts && commitAlerts[item.path];
+
+  const fetchChildren = async () => {
+    if (children !== null) return;
+    setLoadingKids(true);
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repoName}/contents/${item.path}`,
+        { headers: { Authorization: `token ${token}` } },
+      );
+      const data = await res.json();
+      setChildren(
+        Array.isArray(data)
+          ? data.sort((a, b) => {
+              if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            })
+          : [],
+      );
+    } catch {
+      setChildren([]);
+    }
+    setLoadingKids(false);
+  };
+
+  const handleChevron = async (e) => {
+    e.stopPropagation();
+    if (!isDir) return;
+    if (!open && children === null) await fetchChildren();
+    setOpen(o => !o);
+  };
+
+  return (
+    <div>
+      {/* Row */}
+      <div
+        className={`flex items-center gap-1 py-1.5 pr-3 transition-colors text-xs select-none ${
+          checked ? 'bg-purple-500/10 text-purple-300' : 'text-gray-400 hover:bg-white/[0.03]'
+        }`}
+        style={{ paddingLeft: `${indent}px` }}
+      >
+        {/* Chevron / spacer */}
+        <button
+          onClick={handleChevron}
+          className="w-4 h-4 flex items-center justify-center shrink-0"
+          tabIndex={-1}
+        >
+          {isDir ? (
+            loadingKids
+              ? <span className="w-3 h-3 border border-purple-400/60 border-t-transparent rounded-full animate-spin inline-block" />
+              : <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-150 ${open ? 'rotate-90' : ''}`} />
+          ) : <span className="w-3.5" />}
+        </button>
+
+        {/* Checkbox */}
+        <button
+          onClick={(e) => { e.stopPropagation(); togglePath(item.path); }}
+          className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+            checked ? 'bg-purple-600 border-purple-500' : 'border-white/20 hover:border-purple-400'
+          }`}
+        >
+          {checked && <CheckCircle className="w-2.5 h-2.5 text-white" />}
+        </button>
+
+        {/* Icon + name */}
+        <button
+          onClick={isDir ? handleChevron : (e) => { e.stopPropagation(); togglePath(item.path); }}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+        >
+          {isDir
+            ? <Folder className={`w-3.5 h-3.5 shrink-0 ${open ? 'text-amber-300' : 'text-amber-400/70'}`} />
+            : <File className="w-3.5 h-3.5 text-blue-400/60 shrink-0" />}
+          <span className="truncate">{item.name}</span>
+          <span className="ml-auto flex items-center gap-1 shrink-0">
+            {isScanned && (
+              <span title="Já analisado" className="text-emerald-400 text-[9px] font-bold leading-none">▲</span>
+            )}
+            {hasNewCommit && (
+              <span className="text-[8px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded px-1 py-0.5 leading-none whitespace-nowrap">
+                nova atualização
+              </span>
+            )}
+            {isDir && !open && !isScanned && !hasNewCommit && (
+              <span className="text-[9px] text-gray-600">pasta</span>
+            )}
+          </span>
+        </button>
+      </div>
+
+      {/* Children */}
+      {open && children && (
+        children.length === 0
+          ? <p className="text-[10px] text-gray-600 italic py-1" style={{ paddingLeft: `${indent + 22}px` }}>Pasta vazia</p>
+          : <div className="border-l border-white/[0.06]" style={{ marginLeft: `${indent + 11}px` }}>
+              {children.map(child => (
+                <FileTreeNode
+                  key={child.path}
+                  item={child}
+                  depth={depth + 1}
+                  owner={owner}
+                  repoName={repoName}
+                  token={token}
+                  selectedPaths={selectedPaths}
+                  togglePath={togglePath}
+                  scannedPaths={scannedPaths}
+                  isFullScan={isFullScan}
+                  commitAlerts={commitAlerts}
+                />
+              ))}
+            </div>
+      )}
+    </div>
+  );
+}
+
 function SastScanPanel({ repo, onClose, onScanComplete }) {
   const owner   = repo.owner || '';
   const repoName = repo.name || '';
@@ -379,12 +583,53 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const [aiInsightsText, setAiInsightsText] = useState('');
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
 
+  // History state
+  const historyKey = historyKey;
+  const [scanHistory, setScanHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(historyKey)) || []; }
+    catch { return []; }
+  });
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [commitAlerts, setCommitAlerts] = useState({});
+
+  const scannedPaths = useMemo(() => {
+    const paths = new Set();
+    scanHistory.forEach(entry => {
+      if (entry.scope === 'specific' && entry.status === 'CONCLUÍDO') {
+        (entry.paths || []).forEach(p => paths.add(p));
+      }
+    });
+    return paths;
+  }, [scanHistory]);
+
+  const isFullScanDone = useMemo(
+    () => scanHistory.some(e => e.scope === 'full' && e.status === 'CONCLUÍDO'),
+    [scanHistory],
+  );
+
+  const addHistoryEntry = (entry) => {
+    setScanHistory(prev => {
+      const next = [entry, ...prev].slice(0, 20);
+      localStorage.setItem(historyKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updateHistoryEntry = (id, updates) => {
+    setScanHistory(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, ...updates } : e);
+      localStorage.setItem(historyKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Chat state
   const [showChat, setShowChat] = useState(false);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const chatBottomRef = useRef(null);
+  const currentHistoryIdRef = useRef(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
@@ -430,6 +675,34 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
 
   useEffect(() => { if (scope === 'specific') fetchRepoTree(); }, [scope, fetchRepoTree]);
 
+  // Check for new commits since last completed scan, per path
+  useEffect(() => {
+    const lastDone = scanHistory.find(e => e.status === 'CONCLUÍDO');
+    if (!lastDone) return;
+    const token = sessionStorage.getItem('GITHUB_TOKEN');
+    if (!token || !owner || !repoName) return;
+
+    const paths = lastDone.scope === 'full'
+      ? [] // full scan — check at repo root
+      : (lastDone.paths || []);
+
+    const since = new Date(lastDone.date).toISOString();
+    const checkPaths = paths.length ? paths : [''];
+
+    Promise.all(
+      checkPaths.map(async p => {
+        const url = `https://api.github.com/repos/${owner}/${repoName}/commits?${p ? `path=${encodeURIComponent(p)}&` : ''}since=${since}&per_page=1`;
+        const res = await fetch(url, { headers: { Authorization: `token ${token}` } });
+        const data = res.ok ? await res.json() : [];
+        return [p, Array.isArray(data) && data.length > 0];
+      })
+    ).then(results => {
+      const alerts = {};
+      results.forEach(([p, hasNew]) => { if (hasNew) alerts[p] = true; });
+      setCommitAlerts(alerts);
+    }).catch(() => {});
+  }, [scanHistory, owner, repoName]);
+
   // Polling
   useEffect(() => {
     let iv;
@@ -445,10 +718,19 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
               setActiveTab('results');
               localStorage.setItem('previswit_sast_current_view',
                 JSON.stringify({ target: repoName, data: d.data }));
+              if (currentHistoryIdRef.current) {
+                updateHistoryEntry(currentHistoryIdRef.current, {
+                  status: 'CONCLUÍDO',
+                  vulnerable: d.data?.vulnerable ?? false,
+                });
+              }
               removePendingScan(scanId);
               if (onScanComplete) onScanComplete(repoName, d.data);
               clearInterval(iv);
             } else if (d.status === 'ERROR') {
+              if (currentHistoryIdRef.current) {
+                updateHistoryEntry(currentHistoryIdRef.current, { status: 'ERROR' });
+              }
               removePendingScan(scanId);
               clearInterval(iv);
             }
@@ -481,6 +763,17 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
         : intervalUnit === 'DAYS' ? val * 60 * 24 : val;
     }
 
+    const historyEntry = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      scope,
+      paths: scope === 'specific' ? [...selectedPaths, ...customPaths].filter(Boolean) : [],
+      status: 'RUNNING',
+      vulnerable: null,
+    };
+    currentHistoryIdRef.current = historyEntry.id;
+    addHistoryEntry(historyEntry);
+
     try {
       const geminiKey = sessionStorage.getItem('gemini_api_key') || '';
       const res = await fetch(`${API}/sast/schedule`, {
@@ -501,9 +794,11 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
         savePendingScan(d.scan_id, repoName, owner);
       } else {
         setScanStatus('ERROR');
+        updateHistoryEntry(historyEntry.id, { status: 'ERROR' });
       }
     } catch {
       setScanStatus('ERROR');
+      updateHistoryEntry(historyEntry.id, { status: 'ERROR' });
     }
   };
 
@@ -757,7 +1052,17 @@ Responda em português, seja técnico e direto.`;
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 flex overflow-hidden">
+
+        {/* History panel */}
+        <ScanHistoryPanel
+          history={scanHistory}
+          selectedId={selectedHistoryId}
+          onSelectEntry={(entry) => setSelectedHistoryId(entry.id)}
+        />
+
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto">
 
         {/* ===== CONFIG TAB ===== */}
         {activeTab === 'config' && (
@@ -807,7 +1112,7 @@ Responda em português, seja técnico e direto.`;
                         Atualizar
                       </button>
                     </div>
-                    <div className="max-h-52 overflow-y-auto divide-y divide-white/[0.04]">
+                    <div className="max-h-72 overflow-y-auto divide-y divide-white/[0.04]">
                       {loadingTree ? (
                         <div className="flex items-center justify-center py-8">
                           <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
@@ -816,28 +1121,21 @@ Responda em português, seja técnico e direto.`;
                         <p className="text-[11px] text-gray-600 text-center py-6">
                           Nenhum arquivo encontrado — verifique o token GitHub
                         </p>
-                      ) : repoTree.map(item => {
-                        const checked = selectedPaths.has(item.path);
-                        return (
-                          <button key={item.path}
-                            onClick={() => togglePath(item.path)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors text-xs ${
-                              checked ? 'bg-purple-500/10 text-purple-300' : 'text-gray-400 hover:bg-white/[0.03]'
-                            }`}>
-                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                              checked ? 'bg-purple-600 border-purple-500' : 'border-white/20'
-                            }`}>
-                              {checked && <CheckCircle className="w-2.5 h-2.5 text-white" />}
-                            </div>
-                            {item.type === 'dir'
-                              ? <Folder className="w-3.5 h-3.5 text-amber-400/70 shrink-0" />
-                              : <File className="w-3.5 h-3.5 text-blue-400/70 shrink-0" />
-                            }
-                            <span className="truncate">{item.name}</span>
-                            {item.type === 'dir' && <span className="ml-auto text-[9px] text-gray-600">pasta</span>}
-                          </button>
-                        );
-                      })}
+                      ) : repoTree.map(item => (
+                        <FileTreeNode
+                          key={item.path}
+                          item={item}
+                          depth={0}
+                          owner={owner}
+                          repoName={repoName}
+                          token={sessionStorage.getItem('GITHUB_TOKEN') || ''}
+                          selectedPaths={selectedPaths}
+                          togglePath={togglePath}
+                          scannedPaths={scannedPaths}
+                          isFullScan={isFullScanDone}
+                          commitAlerts={commitAlerts}
+                        />
+                      ))}
                     </div>
                   </div>
 
@@ -1316,6 +1614,7 @@ Responda em português, seja técnico e direto.`;
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Toast */}
