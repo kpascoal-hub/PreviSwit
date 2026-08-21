@@ -584,7 +584,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
 
   // History state
-  const historyKey = historyKey;
+  const historyKey = `previswit_sast_history_${owner}_${repoName}`;
   const [scanHistory, setScanHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(historyKey)) || []; }
     catch { return []; }
