@@ -360,7 +360,7 @@ function ScanHistoryPanel({ history, onSelectEntry, selectedId }) {
   };
 
   return (
-    <div className="w-52 shrink-0 border-r border-white/[0.06] flex flex-col bg-[#060b13]/90 overflow-hidden">
+    <div className="w-72 shrink-0 border-r border-white/[0.06] flex flex-col bg-[#060b13]/90 overflow-hidden">
       <div className="px-4 py-3 border-b border-white/[0.05] shrink-0">
         <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center gap-1.5">
           <Clock className="w-3 h-3" /> Histórico de Scans
@@ -390,7 +390,9 @@ function ScanHistoryPanel({ history, onSelectEntry, selectedId }) {
               key={entry.id}
               onClick={() => onSelectEntry(entry)}
               className={`w-full text-left px-4 py-3 border-b border-white/[0.04] transition-all ${
-                isSelected ? 'bg-purple-500/10 border-l-2 border-l-purple-500' : 'hover:bg-white/[0.03]'
+                isSelected
+                  ? 'bg-purple-500/10 border-l-2 border-l-purple-500'
+                  : 'hover:bg-white/[0.03]'
               }`}
             >
               {idx === 0 && (
@@ -411,15 +413,15 @@ function ScanHistoryPanel({ history, onSelectEntry, selectedId }) {
                     Vulnerável
                   </span>
                 )}
+                {isSelected && (
+                  <span className="text-[9px] text-gray-500 ml-auto">clique p/ fechar</span>
+                )}
               </div>
               {entry.scope === 'specific' && (entry.paths || []).length > 0 && (
-                <div className="mt-1.5 space-y-0.5">
-                  {entry.paths.slice(0, 3).map(p => (
-                    <p key={p} className="text-[9px] text-gray-600 font-mono truncate">{p}</p>
+                <div className="mt-2 space-y-1">
+                  {entry.paths.map(p => (
+                    <p key={p} className="text-[9px] text-gray-500 font-mono break-all leading-tight">{p}</p>
                   ))}
-                  {entry.paths.length > 3 && (
-                    <p className="text-[9px] text-gray-600 italic">+{entry.paths.length - 3} mais</p>
-                  )}
                 </div>
               )}
             </button>
@@ -610,7 +612,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const addHistoryEntry = (entry) => {
     setScanHistory(prev => {
       const next = [entry, ...prev].slice(0, 20);
-      localStorage.setItem(historyKey, JSON.stringify(next));
+      try { localStorage.setItem(historyKey, JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -618,7 +620,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const updateHistoryEntry = (id, updates) => {
     setScanHistory(prev => {
       const next = prev.map(e => e.id === id ? { ...e, ...updates } : e);
-      localStorage.setItem(historyKey, JSON.stringify(next));
+      try { localStorage.setItem(historyKey, JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -772,7 +774,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
       vulnerable: null,
     };
     currentHistoryIdRef.current = historyEntry.id;
-    addHistoryEntry(historyEntry);
+    try { addHistoryEntry(historyEntry); } catch {}
 
     try {
       const geminiKey = sessionStorage.getItem('gemini_api_key') || '';
@@ -1058,7 +1060,9 @@ Responda em português, seja técnico e direto.`;
         <ScanHistoryPanel
           history={scanHistory}
           selectedId={selectedHistoryId}
-          onSelectEntry={(entry) => setSelectedHistoryId(entry.id)}
+          onSelectEntry={(entry) =>
+            setSelectedHistoryId(prev => prev === entry.id ? null : entry.id)
+          }
         />
 
         {/* Main content */}
