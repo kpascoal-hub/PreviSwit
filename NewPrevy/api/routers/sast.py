@@ -190,6 +190,14 @@ import hashlib
 
 FINDINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "findings.json")
 
+def _authenticated_clone_url(repo_url: str, github_token: Optional[str]) -> str:
+    """Injeta o token GitHub na URL para clonar repositórios privados via HTTPS."""
+    if not github_token or not repo_url.startswith("https://"):
+        return repo_url
+    if "@" in repo_url.split("://", 1)[1].split("/", 1)[0]:
+        return repo_url  # já tem credenciais embutidas
+    return repo_url.replace("https://", f"https://x-access-token:{github_token}@", 1)
+
 def _load_findings() -> list:
     if not os.path.exists(FINDINGS_FILE):
         return []
@@ -533,10 +541,11 @@ class RepoScanBackgroundRequest(BaseModel):
     interval_minutes: int = 0
     ai_summary_level: str = "EXECUTIVO"
     scan_paths: list = []          # [] = análise completa; lista de caminhos = escopo restrito
+    github_token: Optional[str] = ""   # token BYOK para clonar repositórios privados
 
 def run_background_repo_scan(
     scan_id: str, repo_url: str, gemini_key: str,
-    ai_summary_level: str, scan_paths: list = None,
+    ai_summary_level: str, scan_paths: list = None, github_token: Optional[str] = "",
 ):
     """
     Clona o repositório, executa os 4 scanners SAST com tratamento
@@ -554,8 +563,9 @@ def run_background_repo_scan(
 
     try:
         # ── 1. Clone ─────────────────────────────────────────────────────────
+        clone_url = _authenticated_clone_url(repo_url, github_token)
         clone = subprocess.run(
-            ["git", "clone", "--depth", "1", repo_url, diretorio_temporario],
+            ["git", "clone", "--depth", "1", clone_url, diretorio_temporario],
             capture_output=True, text=True, check=False,
         )
         if clone.returncode != 0:
@@ -793,7 +803,7 @@ async def scan_repo_schedule(
     # Enfileira task (Se fosse 1H ou 24H, poderiamos usar apscheduler,
     # mas para MVP a execução principal ocorre via task simples e 
     # o status CONCLUÍDO fica em memória).
-    background_tasks.add_task(run_background_repo_scan, scan_id, body.repo_url, x_gemini_key, body.ai_summary_level, body.scan_paths)
+    background_tasks.add_task(run_background_repo_scan, scan_id, body.repo_url, x_gemini_key, body.ai_summary_level, body.scan_paths, body.github_token)
     
     return {
         "scan_id": scan_id,

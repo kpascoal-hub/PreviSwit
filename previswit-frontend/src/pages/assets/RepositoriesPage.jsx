@@ -778,6 +778,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
 
     try {
       const geminiKey = sessionStorage.getItem('gemini_api_key') || '';
+      const githubToken = sessionStorage.getItem('GITHUB_TOKEN') || '';
       const res = await fetch(`${API}/sast/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
@@ -787,6 +788,7 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
           interval_minutes: intervalMinutes,
           ai_summary_level: aiLevel,
           scan_paths: paths,
+          github_token: githubToken,
         }),
       });
       if (res.ok) {
