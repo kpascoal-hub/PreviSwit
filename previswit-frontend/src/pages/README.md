@@ -52,3 +52,14 @@ Abaixo está o descritivo de cada módulo para facilitar a navegação e a manut
 2. **Componentes Puros:** Esses arquivos devem focar apenas na **composição visual** e chamadas de API (`fetch`). Evite criar regras de negócio complexas aqui; delegue as regras de processamento (parsing, normalização) sempre para o **Backend (FastAPI)**.
 3. **Sem Dados Falsos (Mock):** O código deve sempre consumir os dados do servidor. Onde houver falta de dados, devemos exibir um "Empty State" estruturado.
 4. **Estilo (Design System):** Todas as telas devem seguir o padrão estético **Cyber Dark Enterprise**, mantendo coesão visual e classes estruturais via Tailwind CSS.
+
+---
+
+## 👥 Integrantes
+
+| Nome | RM |
+|------|----|
+| Bruno Tomé Duarte | RM 571712 |
+| Matheus Pascoal Craveiro | RM 572715 |
+| Gabriel Zobolli Carnevalli | RM 571728 |
+| Heitor Fonseca Amorim dos Santos | RM 569118 |

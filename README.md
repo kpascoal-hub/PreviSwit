@@ -82,6 +82,17 @@ Se você precisa alterar componentes do React em tempo real (Hot Module Replacem
 
 ---
 
+## 👥 Integrantes
+
+| Nome | RM |
+|------|----|
+| Bruno Tomé Duarte | RM 571712 |
+| Matheus Pascoal Craveiro | RM 572715 |
+| Gabriel Zobolli Carnevalli | RM 571728 |
+| Heitor Fonseca Amorim dos Santos | RM 569118 |
+
+---
+
 ## 📄 Licença
 
 Este projeto é licenciado sob a **GNU General Public License v3.0 ou posterior (GPL-3.0-or-later)**.

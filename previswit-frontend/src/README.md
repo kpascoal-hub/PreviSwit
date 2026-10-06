@@ -128,3 +128,14 @@ curl -X POST http://localhost:8000/api/v1/reports/generate-pdf \
 ---
 
 > *Este README.md serve como documento de Hand-Off técnico para novos desenvolvedores e auditores que forem trabalhar com os motores de Risco, PDF e Conformidade da plataforma PreviSwit AI-ASPM.*
+
+---
+
+## 👥 Integrantes
+
+| Nome | RM |
+|------|----|
+| Bruno Tomé Duarte | RM 571712 |
+| Matheus Pascoal Craveiro | RM 572715 |
+| Gabriel Zobolli Carnevalli | RM 571728 |
+| Heitor Fonseca Amorim dos Santos | RM 569118 |

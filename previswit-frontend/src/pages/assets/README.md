@@ -87,3 +87,14 @@ if (effectiveScanData) {
 ```
 
 Apenas resultados matematicamente isolados de erro são marcados em vermelho. Se não existirem, o React plota o código limpo (🛡️ Código Seguro).
+
+---
+
+## 👥 Integrantes
+
+| Nome | RM |
+|------|----|
+| Bruno Tomé Duarte | RM 571712 |
+| Matheus Pascoal Craveiro | RM 572715 |
+| Gabriel Zobolli Carnevalli | RM 571728 |
+| Heitor Fonseca Amorim dos Santos | RM 569118 |

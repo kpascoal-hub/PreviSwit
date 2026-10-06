@@ -256,3 +256,14 @@ Engenharia de Software · Cybersecurity
 <div align="center">
   <sub>Se essa ferramenta te ajudou, deixa uma ⭐ no repositório.</sub>
 </div>
+
+---
+
+## 👥 Integrantes
+
+| Nome | RM |
+|------|----|
+| Bruno Tomé Duarte | RM 571712 |
+| Matheus Pascoal Craveiro | RM 572715 |
+| Gabriel Zobolli Carnevalli | RM 571728 |
+| Heitor Fonseca Amorim dos Santos | RM 569118 |
