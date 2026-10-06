@@ -3,7 +3,7 @@
 ### AI-Powered ASPM
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-orange?style=for-the-badge&logo=python)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-red?style=for-the-badge)
 ![Version](https://img.shields.io/badge/Version-1.0-blue?style=for-the-badge)
 

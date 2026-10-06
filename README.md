@@ -78,3 +78,11 @@ Se você precisa alterar componentes do React em tempo real (Hot Module Replacem
    ```
 
 *Certifique-se de que a API (previswit-server) esteja rodando no Docker para que as chamadas no frontend não falhem.*
+
+
+---
+
+## 📄 Licença
+
+Este projeto é licenciado sob a **GNU General Public License v3.0 ou posterior (GPL-3.0-or-later)**.
+O texto completo está em [LICENSE.md](LICENSE.md) e cada arquivo de código-fonte contém o aviso de licença correspondente.
