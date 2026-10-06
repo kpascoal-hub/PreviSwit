@@ -1,4 +1,4 @@
-# PreviSwit ASPM - Dashboard Platform
+# PreviSwit ASPM - Dashboard Platform.
 
 Bem-vindo ao repositório do **PreviSwit ASPM** (Application Security Posture Management). 
 Esta plataforma unifica o gerenciamento de vulnerabilidades, orquestração de scans de segurança e insights através de Inteligência Artificial.
