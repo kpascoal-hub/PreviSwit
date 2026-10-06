@@ -23,7 +23,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:10200';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:10100';
 
 /**
  * @param {string} path - Caminho do WebSocket, ex: '/ws/web_dashboard'

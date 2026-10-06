@@ -25,6 +25,7 @@ import {
   Zap, Activity, Database, Code2, Terminal, TrendingUp, Eye,
   X, Folder, File, Plus, Minus, ChevronRight, Bug, Lock,
   Server, Info, AlertOctagon, BrainCircuit, Sparkles, Send, Upload,
+  BookMarked, Loader2, Bot,
 } from 'lucide-react';
 import RiskGraphCanvas from './RiskGraphCanvas';
 
@@ -249,9 +250,126 @@ function extractCodeBlocks(text) {
 }
 
 // ── ChatMessage ───────────────────────────────────────────────────────────────
-function ChatMessage({ msg, onPushToGitHub, suggestedFile }) {
+function ChatMessage({ msg, onPushToGitHub, suggestedFile, onWizardAction }) {
   const [pushState, setPushState] = useState({});
   // pushState[index] = { open, filePath, commitMsg, loading, done, error }
+
+  if (msg.role === 'wizard') {
+    const kindLabel = { note: 'Observação', risk_acceptance: 'Aceite de Risco', evidence: 'Evidência', compensating_control: 'Controle Compensatório' };
+
+    if (msg.step === 'choose') {
+      return (
+        <div className="flex gap-2.5">
+          <div className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mt-1">
+            <BookMarked className="w-3 h-3 text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] text-gray-300 mb-3">Como você quer criar a anotação?</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => onWizardAction('ai_auto')}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-left transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-violet-400 shrink-0" />
+                <div>
+                  <p className="text-[12px] font-semibold text-violet-300">IA cria automaticamente</p>
+                  <p className="text-[10px] text-gray-500">Gera título e contexto a partir das vulnerabilidades detectadas</p>
+                </div>
+              </button>
+              <button
+                onClick={() => onWizardAction('manual')}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.08] text-left transition-all"
+              >
+                <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                <div>
+                  <p className="text-[12px] font-semibold text-gray-300">Criar manualmente</p>
+                  <p className="text-[10px] text-gray-500">Você digita título, contexto e tipo da anotação</p>
+                </div>
+              </button>
+              <button
+                onClick={() => onWizardAction('cancel')}
+                className="text-[10px] text-gray-600 hover:text-gray-400 text-left px-1 transition-all"
+              >Cancelar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (msg.step === 'manual_context' || msg.step === 'manual_note') {
+      return (
+        <div className="flex gap-2.5">
+          <div className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mt-1">
+            <BookMarked className="w-3 h-3 text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <MarkdownText text={msg.prompt || ''} />
+          </div>
+        </div>
+      );
+    }
+
+    if (msg.step === 'ai_preview' && msg.generating) {
+      return (
+        <div className="flex gap-2.5">
+          <div className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mt-1">
+            <Loader2 className="w-3 h-3 text-violet-400 animate-spin" />
+          </div>
+          <p className="text-[12px] text-gray-500 italic">Gerando anotação com IA…</p>
+        </div>
+      );
+    }
+
+    if (msg.step === 'preview' && msg.data) {
+      const d = msg.data;
+      return (
+        <div className="flex gap-2.5">
+          <div className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mt-1">
+            <BookMarked className="w-3 h-3 text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-gray-400 mb-2">Pré-visualização da anotação:</p>
+            <div className="p-3 rounded-xl bg-violet-500/[0.07] border border-violet-500/20 space-y-1.5">
+              <p className="text-[12px] font-semibold text-white">{d.title}</p>
+              {d.context && <p className="text-[11px] text-gray-400">{d.context}</p>}
+              <span className="inline-block text-[9px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                {kindLabel[d.kind] || d.kind || 'note'}
+              </span>
+            </div>
+            <div className="flex gap-2 mt-2.5">
+              <button
+                onClick={() => onWizardAction('confirm', d)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[11px] font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />Confirmar anotação
+              </button>
+              <button
+                onClick={() => onWizardAction('cancel')}
+                className="px-3 py-1.5 rounded-lg text-[11px] text-gray-500 hover:text-white transition-all"
+              >Cancelar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (msg.step === 'done') {
+      return (
+        <div className="flex gap-2.5">
+          <div className="shrink-0 w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mt-1">
+            <CheckCircle className="w-3 h-3 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] text-emerald-300 font-semibold">Anotação criada com sucesso!</p>
+            {msg.data?.title && <p className="text-[11px] text-gray-500 mt-0.5">"{msg.data.title}"</p>}
+            <p className="text-[10px] text-gray-600 mt-1">Disponível em Métricas de Risco → Plano de Ação.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }
 
   if (msg.role === 'user') {
     return (
@@ -651,6 +769,8 @@ function SastScanPanel({ repo, onClose, onScanComplete }) {
   const [chatSending, setChatSending] = useState(false);
   const chatBottomRef = useRef(null);
   const currentHistoryIdRef = useRef(null);
+  // Annotation wizard: null = inativo; { step, data } = em progresso
+  const [annotWizard, setAnnotWizard] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
@@ -938,12 +1058,146 @@ Seja técnico e objetivo. Não mencione "commit" — isso é uma varredura do re
     }
   };
 
+  // ── Annotation wizard helpers ────────────────────────────────────────────────
+  const _scrollChat = () => setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+  const _pushWizardMsg = (step, extra = {}) =>
+    setChatMsgs(prev => [...prev, { id: Date.now() + 1, role: 'wizard', step, ...extra }]);
+
+  const _confirmAnnotation = async (data) => {
+    try {
+      const res = await fetch(`${API}/posture/annotations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          body: data.context || '',
+          kind: data.kind || 'note',
+          scope: 'global',
+          author: data.author || 'Chat IA',
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setChatMsgs(prev => [...prev, {
+        id: Date.now() + 2, role: 'wizard', step: 'done',
+        data: { title: data.title },
+      }]);
+      setAnnotWizard(null);
+      _scrollChat();
+    } catch (e) {
+      showToast(`Erro ao salvar anotação: ${e.message}`);
+    }
+  };
+
+  const handleWizardInput = async (text) => {
+    setChatInput('');
+    const userMsg = { id: Date.now(), role: 'user', text };
+    setChatMsgs(prev => [...prev, userMsg]);
+    _scrollChat();
+
+    const { step, data } = annotWizard;
+
+    if (step === 'manual_title') {
+      const updated = { ...data, title: text };
+      setAnnotWizard({ step: 'manual_context', data: updated });
+      _pushWizardMsg('manual_context', { prompt: `Título registrado: **"${text}"**\n\nAgora descreva o contexto desta anotação (o que motivou ela, o risco envolvido, etc.):` });
+      _scrollChat();
+      return;
+    }
+    if (step === 'manual_context') {
+      const updated = { ...data, context: text };
+      setAnnotWizard({ step: 'manual_note', data: updated });
+      _pushWizardMsg('manual_note', { prompt: 'Contexto registrado. Qual o tipo da anotação? Digite:\n• **note** — observação geral\n• **risk_acceptance** — aceite formal de risco\n• **evidence** — evidência de controle\n\n(ou Enter para usar **note**)' });
+      _scrollChat();
+      return;
+    }
+    if (step === 'manual_note') {
+      const kind = ['risk_acceptance', 'evidence', 'compensating_control'].includes(text.trim().toLowerCase())
+        ? text.trim().toLowerCase() : 'note';
+      const updated = { ...data, kind };
+      setAnnotWizard({ step: 'preview', data: updated });
+      _pushWizardMsg('preview', { data: updated });
+      _scrollChat();
+      return;
+    }
+  };
+
+  const handleAiAutoAnnotation = async () => {
+    const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
+    if (!geminiKey) { showToast('Configure a chave Gemini em Integrações.'); return; }
+
+    setAnnotWizard(prev => ({ ...prev, step: 'ai_generating' }));
+    setChatMsgs(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, generating: true } : m));
+
+    const findings = extractFindings(scanData?.scanner_results);
+    const summary = findings.slice(0, 8).map(f =>
+      `[${f.tool}] ${f.ruleId} em ${f.file}: ${f.message.slice(0, 100)}`
+    ).join('\n');
+
+    const prompt =
+`Você é um CISO criando uma anotação de risco. Com base nos achados SAST abaixo, gere uma anotação concisa.
+Responda EXATAMENTE neste JSON, sem texto extra:
+{"title":"<título em 1 linha>","context":"<contexto em 2-3 frases>","kind":"note"}
+
+Achados:
+${summary || 'Nenhum achado detectado.'}`;
+
+    try {
+      const res = await fetch(`${API}/ai/insight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      const raw = d.response || '';
+
+      let parsed;
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      } catch { parsed = null; }
+
+      if (!parsed?.title) {
+        parsed = { title: `Análise de risco — ${repoName}`, context: raw.slice(0, 300), kind: 'note' };
+      }
+      parsed.author = 'IA (auto)';
+
+      setAnnotWizard({ step: 'preview', data: parsed });
+      setChatMsgs(prev => [...prev.slice(0, -1), { ...prev[prev.length - 1], generating: false, data: parsed, step: 'ai_preview' }]);
+      _pushWizardMsg('preview', { data: parsed });
+      _scrollChat();
+    } catch (e) {
+      showToast(`Erro na IA: ${e.message}`);
+      setAnnotWizard(null);
+    }
+  };
+
   // ── Chat with AI ────────────────────────────────────────────────────────────
   const handleChatSend = async () => {
     const text = chatInput.trim();
     if (!text || chatSending) return;
+
+    // Se wizard de anotação ativo, redireciona
+    if (annotWizard && ['manual_title', 'manual_context', 'manual_note'].includes(annotWizard.step)) {
+      await handleWizardInput(text);
+      return;
+    }
+
     const geminiKey = sessionStorage.getItem('gemini_api_key') || localStorage.getItem('previswit_gemini_key') || '';
     if (!geminiKey) { showToast('Configure a chave Gemini em Integrações.'); return; }
+
+    // Detecta intent de anotação
+    const isAnnotIntent = /anota[çc][aã]o|anotar|fazer anota|criar anota|nova anota|registrar risco|risk note/i.test(text);
+    if (isAnnotIntent && !annotWizard) {
+      setChatInput('');
+      const userMsg = { id: Date.now(), role: 'user', text };
+      setChatMsgs(prev => [...prev, userMsg]);
+      _pushWizardMsg('choose');
+      setAnnotWizard({ step: 'choose', data: {} });
+      _scrollChat();
+      return;
+    }
 
     setChatInput('');
     const userMsg = { id: Date.now(), role: 'user', text };
@@ -1547,6 +1801,25 @@ Responda em português, seja técnico e direto.`;
                             msg={msg}
                             onPushToGitHub={pushFileToGitHub}
                             suggestedFile={extractFindings(scanData.scanner_results)[0]?.file || ''}
+                            onWizardAction={(action, data) => {
+                              if (action === 'ai_auto') {
+                                handleAiAutoAnnotation();
+                              } else if (action === 'manual') {
+                                setAnnotWizard({ step: 'manual_title', data: {} });
+                                setChatMsgs(prev => [...prev, {
+                                  id: Date.now(), role: 'wizard', step: 'manual_context',
+                                  prompt: 'Qual será o **título** desta anotação?',
+                                }]);
+                                setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+                              } else if (action === 'confirm') {
+                                _confirmAnnotation(data);
+                              } else if (action === 'cancel') {
+                                setAnnotWizard(null);
+                                setChatMsgs(prev => [...prev, {
+                                  id: Date.now(), role: 'ai', text: 'Ok, anotação cancelada. Pode continuar com outras perguntas!', codeBlocks: [],
+                                }]);
+                              }
+                            }}
                           />
                         ))}
                         {chatSending && (
@@ -1586,11 +1859,13 @@ Responda em português, seja técnico e direto.`;
 
                 {/* AI Insight summary (from scan) */}
                 {scanData.ai_insight && (
-                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
-                    <p className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 flex flex-col">
+                    <p className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5 shrink-0">
                       <Zap className="w-3 h-3" />Resumo IA — {aiLevel}
                     </p>
-                    <MarkdownText text={scanData.ai_insight} />
+                    <div className="overflow-y-auto max-h-64 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                      <MarkdownText text={scanData.ai_insight} />
+                    </div>
                   </div>
                 )}
 

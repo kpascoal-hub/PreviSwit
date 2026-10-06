@@ -1,0 +1,21 @@
+[
+  {
+    "id": "fb347236-2937-4ed0-bb64-a6143d87b66c",
+    "scope": "global",
+    "scope_ref": null,
+    "kind": "risk_acceptance",
+    "title": "Fazer remediação no projeto x",
+    "body": "saadadadaw",
+    "expires_at": null,
+    "finding_ids": [],
+    "author": null,
+    "created_at": "2026-10-04T13:11:59.839722+00:00",
+    "updated_at": "2026-10-04T13:11:59.839728+00:00",
+    "risk_snapshot": {
+      "risk_score": 76.9,
+      "risk_level": "CRITICAL",
+      "exposure_R": 857.7,
+      "open_findings": 60
+    }
+  }
+]

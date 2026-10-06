@@ -738,30 +738,65 @@ def run_background_repo_scan(
     # ── 9. Gemini Insight ─────────────────────────────────────────────────────
     insight_text = ""
     if is_vulnerable and gemini_key:
-        try:
-            from google import genai as _genai
-            client = _genai.Client(api_key=gemini_key)
-            foco_ia = (
-                "detalhes técnicos das falhas, regras violadas e sugestões de correção (Visão Técnica)"
-                if ai_summary_level == "TECNICO" else
-                "impacto em controles ISO 27001 e SOC2 (Visão de Conformidade)"
-                if ai_summary_level == "CONFORMIDADE" else
-                "impacto de risco no negócio, sem se aprofundar em código (Visão Executiva)"
-            )
-            prompt = (
-                f"Atue como Arquiteto Sênior de AppSec. Analisamos {repo_url} "
-                f"(Semgrep {counts['semgrep']} achados HIGH/CRITICAL, "
-                f"Trivy {counts['trivy']} CVEs HIGH/CRITICAL, "
-                f"Gitleaks {counts['gitleaks']} segredos, "
-                f"Checkov {counts['checkov']} falhas IaC). "
-                f"Gere um resumo conciso (máx. 2 parágrafos) focado em: {foco_ia}. Apenas texto limpo."
-            )
-            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            if response.text:
-                insight_text = response.text.strip()
-        except Exception as e:
-            logger.error("Erro Gemini insight: %s", e)
-            insight_text = "Erro ao conectar com o motor de IA."
+        import time as _time
+
+        foco_ia = (
+            "detalhes técnicos das falhas, regras violadas e sugestões de correção (Visão Técnica)"
+            if ai_summary_level == "TECNICO" else
+            "impacto em controles ISO 27001 e SOC2 (Visão de Conformidade)"
+            if ai_summary_level == "CONFORMIDADE" else
+            "impacto de risco no negócio, sem se aprofundar em código (Visão Executiva)"
+        )
+        prompt = (
+            f"Atue como Arquiteto Sênior de AppSec. Analisamos {repo_url} "
+            f"(Semgrep {counts['semgrep']} achados HIGH/CRITICAL, "
+            f"Trivy {counts['trivy']} CVEs HIGH/CRITICAL, "
+            f"Gitleaks {counts['gitleaks']} segredos, "
+            f"Checkov {counts['checkov']} falhas IaC). "
+            f"Gere um resumo conciso (máx. 2 parágrafos) focado em: {foco_ia}. Apenas texto limpo."
+        )
+
+        # O Gemini devolve 503 UNAVAILABLE sob alta demanda — falha transitória.
+        # Aplica a mesma política de resiliência já usada em ai_chat.py e no agente:
+        # 3 tentativas com backoff. Antes havia tentativa única, então qualquer
+        # soluço do provedor virava "Erro ao conectar" na tela.
+        for attempt in range(3):
+            try:
+                from google import genai as _genai
+                client = _genai.Client(api_key=gemini_key)
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash", contents=prompt
+                )
+                if response.text:
+                    insight_text = response.text.strip()
+                break
+            except Exception as e:
+                err = str(e)
+                transitorio = any(
+                    m in err for m in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED")
+                )
+                logger.warning(
+                    "Gemini insight tentativa %d/3 falhou: %s", attempt + 1, err[:160]
+                )
+                if transitorio and attempt < 2:
+                    _time.sleep(2 ** (attempt + 1))   # 2s, depois 4s
+                    continue
+
+                logger.error("Erro Gemini insight (definitivo): %s", err)
+                # Degrada com o dado real do scan em vez de deixar o painel sem saída.
+                motivo = (
+                    "o Gemini está com alta demanda"
+                    if transitorio else "houve falha na chamada à IA"
+                )
+                insight_text = (
+                    f"O resumo por IA não pôde ser gerado agora porque {motivo}. "
+                    f"Resultado do scan: Semgrep {counts['semgrep']} achados HIGH/CRITICAL, "
+                    f"Trivy {counts['trivy']} CVEs HIGH/CRITICAL, "
+                    f"Gitleaks {counts['gitleaks']} segredos expostos, "
+                    f"Checkov {counts['checkov']} falhas de IaC. "
+                    f"Rode a análise novamente em alguns instantes para obter o texto."
+                )
+                break
 
     # ── 10. CVE enrichment ────────────────────────────────────────────────────
     cve_report = build_cve_report(trivy_data, semgrep_data)

@@ -1,16 +1,30 @@
 [
   {
-    "id": "719475a1-2954-4717-8f21-2ee72f922b35",
-    "title": "Conformidade CONFORMIDADE — Ha23",
-    "target": "repo:Ha23",
-    "target_label": "Ha23",
+    "id": "f3f73c1e-4195-4228-a34f-2e74081066fb",
+    "title": "Conformidade EXECUTIVO — Teste",
+    "target": "repo:Teste",
+    "target_label": "Teste",
     "type": "Scan de Repositório",
-    "standard": "ISO 27001 / SOC2",
-    "risk": "CLEAN",
-    "compliance_model": "CONFORMIDADE",
+    "standard": "OWASP Top 10",
+    "risk": "HIGH",
+    "compliance_model": "EXECUTIVO",
     "status": "ready",
-    "requested_at": "2026-07-18T00:52:27.960365Z",
-    "completed_at": "2026-07-18T00:52:27.960376Z",
+    "requested_at": "2026-10-04T13:04:56.992512Z",
+    "completed_at": "2026-10-04T13:04:56.992549Z",
+    "has_scan_data": true
+  },
+  {
+    "id": "f2eb6122-4be9-440a-a756-1c22d9269233",
+    "title": "Conformidade TECNICO — teste-nuvem",
+    "target": "repo:teste-nuvem",
+    "target_label": "teste-nuvem",
+    "type": "Scan de Repositório",
+    "standard": "OWASP Top 10",
+    "risk": "HIGH",
+    "compliance_model": "TECNICO",
+    "status": "ready",
+    "requested_at": "2026-08-24T11:04:25.943112Z",
+    "completed_at": "2026-08-24T11:04:25.943124Z",
     "has_scan_data": true
   }
 ]

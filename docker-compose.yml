@@ -2,7 +2,7 @@
 # PreviSwit AI-ASPM — Docker Compose v4
 # =============================================================================
 # Serviços:
-#   previswit-server   → FastAPI + WebSocket Hub (porta 10200)
+#   previswit-server   → FastAPI + WebSocket Hub (host 10100 → container 10200)
 #   previswit-agent    → Agente de Pentest Kali (cliente WS)
 #   previswit-frontend → React/Vite + Nginx (porta 3000)
 #
@@ -51,7 +51,10 @@ services:
   # ===========================================================================
   # previswit-server
   # FastAPI v4 + WebSocket Hub — API REST + Orquestração de Scans
-  # Porta: 10200 (host) → 10200 (container)
+  # Porta: 10100 (host) → 10200 (container)
+  # NOTA: o host usa 10100 porque o WinNAT/Hyper-V no Windows reserva a faixa
+  # 10136-11135, o que impede o bind em 10200 (erro "socket ... forbidden").
+  # A porta interna segue 10200 — rede do Docker não é afetada pela reserva.
   # ===========================================================================
   previswit-server:
     build:
@@ -60,7 +63,7 @@ services:
     container_name: previswit-server
     restart: unless-stopped
     ports:
-      - "10200:10200"
+      - "10100:10200"
     environment:
       # Servidor
       SERVER_HOST: "0.0.0.0"
@@ -92,6 +95,8 @@ services:
       # Rebuild não apaga os dados. Mudanças nos JSONs são instantâneas.
       - ./NewPrevy/data:/app/data
       - agent_reports:/app/reports
+      # Docker socket — necessário para o Trivy escanear imagens locais
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - previswit-net
     healthcheck:

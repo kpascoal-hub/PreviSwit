@@ -1,0 +1,39 @@
+[
+  {
+    "id": "43005aab-e8f1-4f74-b2f2-00b743e4e54c",
+    "title": "Atualizar PyYAML → 5.4 (3 CVEs, 3 CRITICAL)",
+    "description": "Base 2.0h + 0.25h por finding adicional (custo marginal decrescente: a correção é aplicada uma única vez). 3.0h de teste de regressão. Taxa R$ 180.00/h (configurável em /posture/config). NÃO inclui licenças, infraestrutura, downtime ou custo de oportunidade.",
+    "source": "simulator",
+    "source_ref": "pkg:PyYAML",
+    "package_id": "pkg:PyYAML",
+    "finding_ids": [
+      "0698d17f-1034-4ff6-a127-5155659ce25b",
+      "6ac60a73-49ff-4731-8f5e-6098a808dd09",
+      "eb60ca17-59b6-4fc7-91dd-43d8341caf98"
+    ],
+    "control_refs": [
+      "OWASP_TOP_10_2021:A06",
+      "ISO_27001_2022:A.8.8",
+      "SOC2_TSC_2017:CC7.1",
+      "NIST_CSF_2_0:ID.RA-01",
+      "PCI_DSS_4_0:6",
+      "PCI_DSS_4_0:11",
+      "CIS_CONTROLS_V8:2",
+      "CIS_CONTROLS_V8:7",
+      "LGPD:Art. 47",
+      "LGPD:Art. 6º VIII"
+    ],
+    "owner": null,
+    "due_date": null,
+    "estimated_hours": 5.5,
+    "estimated_cost": {
+      "brl": 990.0,
+      "usd": 181.65
+    },
+    "risk_points": 133.07,
+    "status": "blocked",
+    "created_at": "2026-10-04T13:11:07.486597+00:00",
+    "updated_at": "2026-10-04T13:12:45.261398+00:00",
+    "completed_at": null
+  }
+]

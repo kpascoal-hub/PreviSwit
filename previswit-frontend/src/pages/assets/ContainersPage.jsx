@@ -39,7 +39,7 @@ import {
   ArrowLeft, Box, Shield, AlertTriangle, RefreshCw,
   Search, CheckCircle, Activity, Database,
   TrendingUp, ChevronRight, ExternalLink,
-  Package, Layers, Zap, Info, Clock,
+  Package, Layers, Zap, Info, Clock, Trash2,
 } from 'lucide-react';
 
 const API = '/api/v1';
@@ -350,6 +350,20 @@ export default function ContainersPage() {
     if (e.key === 'Enter') handleScan();
   };
 
+  const handleClearScan = () => {
+    if (lastImage) {
+      localStorage.removeItem('previswit_container_' + lastImage);
+    }
+    localStorage.removeItem('previswit_container_last_key');
+    setScanData(null);
+    setScanStatus(null);
+    setScanError(null);
+    setScanId(null);
+    setLastImage('');
+    setImageInput('');
+    showToast('Registros de vulnerabilidades removidos');
+  };
+
   // ── Computed ─────────────────────────────────────────────────────────────────
   const isScanning   = scanStatus === 'PENDING' || scanStatus === 'RUNNING';
   const isConcluded  = scanStatus === 'CONCLUÍDO';
@@ -488,6 +502,13 @@ export default function ContainersPage() {
               <span className="text-[10px] text-gray-500 bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-md">
                 {filteredVulns.length} / {allVulns.length}
               </span>
+              <button
+                onClick={handleClearScan}
+                title="Limpar resultados"
+                className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-150"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {/* Severity filter tabs */}

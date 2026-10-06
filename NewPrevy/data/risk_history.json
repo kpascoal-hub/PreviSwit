@@ -1,1 +1,421 @@
-[]
+[
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:20:51.865274"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:25:42.956376"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:25:50.154819"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:41:45.460877"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:41:48.591718"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:42:39.046783"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:43:34.880502"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:43:37.032304"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:43:37.977366"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:43:38.385543"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:43:38.797524"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:44:29.846264"
+  },
+  {
+    "score": 0.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-07T23:44:34.393563"
+  },
+  {
+    "score": 5.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T01:23:29.546162"
+  },
+  {
+    "score": 5.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T01:23:48.191842"
+  },
+  {
+    "score": 5.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T01:43:41.084399"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T01:47:01.757235"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T01:47:05.673197"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T03:11:17.990940"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T03:11:25.053735"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:08:22.224653"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:27:29.846098"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:27:41.309733"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:28:23.817880"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:28:39.492818"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:38:14.166705"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:38:41.251868"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:40:01.929902"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:40:31.928927"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:44:00.561652"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T13:44:25.294674"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T17:30:27.478140"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T17:42:01.709685"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T17:50:48.945334"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T17:51:42.593294"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T17:56:18.882294"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:18:40.634057"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:26:11.044506"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:26:18.732620"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:31:01.123902"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:31:48.729444"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:35:41.737492"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:42:40.490963"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:52:26.329919"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:53:55.000808"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T18:55:17.665558"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:07:20.874912"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:07:23.628795"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:08:55.416619"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:14:29.164186"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:14:31.015411"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:32:19.915159"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-08T21:53:48.242217"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-09T03:40:33.163313"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-09T03:46:05.662777"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-20T22:59:19.702859"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-20T23:20:00.097515"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:29:13.394420"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:29:33.372460"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:39:01.126948"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:45:30.281969"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:47:14.929316"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T01:53:03.300579"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-21T02:00:42.008423"
+  },
+  {
+    "score": 68.7,
+    "score_base": 68.6,
+    "level": "HIGH",
+    "open_findings": 57,
+    "recorded_at": "2026-08-23T23:57:47.730299+00:00",
+    "engine": "posture_v2"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T11:29:27.723621"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T11:35:17.552796"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T11:37:00.826129"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T12:01:15.987810"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T12:07:44.677095"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T12:24:42.430212"
+  },
+  {
+    "score": 10.0,
+    "level": "LOW",
+    "recorded_at": "2026-08-23T14:06:55.960481"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T14:38:26.629613"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T14:38:38.517132"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T14:41:55.646126"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T14:52:09.959258"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T16:20:46.030138"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T16:41:46.468788"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T16:49:56.228306"
+  },
+  {
+    "score": 100.0,
+    "level": "CRITICAL",
+    "recorded_at": "2026-08-23T16:58:57.813553"
+  },
+  {
+    "score": 69.8,
+    "score_base": 69.7,
+    "level": "HIGH",
+    "open_findings": 60,
+    "recorded_at": "2026-08-24T13:11:32.546010+00:00",
+    "engine": "posture_v2"
+  },
+  {
+    "score": 76.9,
+    "score_base": 76.9,
+    "level": "CRITICAL",
+    "open_findings": 60,
+    "recorded_at": "2026-10-04T13:13:02.163252+00:00",
+    "engine": "posture_v2"
+  }
+]

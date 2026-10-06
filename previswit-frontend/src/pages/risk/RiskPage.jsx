@@ -18,359 +18,384 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 /**
- * PreviSwit AI-ASPM — Métricas de Risco & Conformidade
- * =======================================================
- * Cockpit Executivo (C-Level): Health Score Evolutivo, Exposição Financeira,
- * e Painel de Compliance (ISO 27001 / SOC 2).
+ * PreviSwit AI-ASPM — Métricas de Risco & Governança
+ * ===================================================
+ * Cockpit executivo: postura de risco, conformidade em 7 frameworks,
+ * radar de ameaças e regulatório, plano de ação e simulador de investimento.
  *
- * Coleta os resultados da varredura diretamente do localStorage.
+ * TUDO vem da API (`/api/v1/posture/*`). Zero localStorage, zero número
+ * inventado no cliente. A versão anterior desta página semeava histórico
+ * falso em localStorage e estimava exposição financeira como
+ * `CRITICAL * 50000` — ambos removidos.
  *
- * Design: Cyber Dark Enterprise (#060b13 / glass cards / gradientes).
+ * CONVENÇÃO DE SINAL: a API usa 0 = melhor, 100 = pior. Exibimos exatamente
+ * essa convenção e chamamos o número de "Risco" (não "Health Score"), porque
+ * inverter para exibição é a fonte de bug mais provável desta tela.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
-  Activity, DollarSign, ShieldAlert, CheckCircle2,
-  AlertTriangle, Shield, TrendingUp, TrendingDown, ChevronRight
+  Activity, ShieldCheck, Radar, ClipboardList, Calculator,
+  RefreshCw, TrendingUp, TrendingDown, Minus, AlertTriangle,
+  CheckCircle, XCircle, Layers, ShieldAlert,
 } from 'lucide-react';
 
-// ── Funções de Cálculo ────────────────────────────────────────────────────────
+import { Panel, Bar, riskColors, ScopeNote, Spinner, ErrorBanner, jget, API } from './ui';
+import ComplianceTab from './tabs/ComplianceTab';
+import RadarTab from './tabs/RadarTab';
+import ActionPlanTab from './tabs/ActionPlanTab';
+import SimulatorTab from './tabs/SimulatorTab';
 
-function calculateScore(findings) {
-  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-  findings.forEach(f => {
-    if (counts[f.severity] !== undefined) counts[f.severity]++;
-  });
+const TABS = [
+  { id: 'compliance', label: 'Conformidade', icon: ShieldCheck },
+  { id: 'simulator',  label: 'Simulador',    icon: Calculator },
+  { id: 'radar',      label: 'Radar',        icon: Radar },
+  { id: 'plan',       label: 'Plano de Ação', icon: ClipboardList },
+];
 
-  let score = 100 - (counts.CRITICAL * 15) - (counts.HIGH * 5) - (counts.MEDIUM * 2);
-  return Math.max(0, score);
-}
-
-function getScoreGrade(score) {
-  if (score >= 90) return { grade: 'A', color: 'text-emerald-400',  bg: 'bg-emerald-500/10',  border: 'border-emerald-500/30' };
-  if (score >= 75) return { grade: 'B', color: 'text-blue-400',     bg: 'bg-blue-500/10',     border: 'border-blue-500/30' };
-  if (score >= 60) return { grade: 'C', color: 'text-amber-400',    bg: 'bg-amber-500/10',    border: 'border-amber-500/30' };
-  if (score >= 40) return { grade: 'D', color: 'text-orange-400',   bg: 'bg-orange-500/10',   border: 'border-orange-500/30' };
-  return           { grade: 'F', color: 'text-rose-400',     bg: 'bg-rose-500/10',     border: 'border-rose-500/30' };
-}
-
-// ── Componente Custom Tooltip Recharts ────────────────────────────────────────
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    const val = payload[0].value;
-    return (
-      <div className="bg-[#060b13]/95 border border-white/[0.08] p-3 rounded-xl shadow-xl backdrop-blur-md">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">{label}</p>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-          <p className="text-lg font-black text-white">Score: <span className="text-emerald-400">{val}</span></p>
-        </div>
-      </div>
-    );
-  }
-  return null;
+const TREND = {
+  improving: { icon: TrendingDown, text: 'text-emerald-400', label: 'melhorando' },
+  worsening: { icon: TrendingUp,   text: 'text-rose-400',    label: 'piorando' },
+  stable:    { icon: Minus,        text: 'text-gray-500',    label: 'estável' },
 };
 
-// ── Componente Principal ──────────────────────────────────────────────────────
+/** Gradiente com id próprio — `colorScore` já é usado pelo DashboardPage. */
+const GRADIENT_ID = 'riskPostureGradient';
+
+const HistoryTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const v = payload[0].value;
+  const c = riskColors(v);
+  return (
+    <div className="bg-[#060b13]/95 border border-white/[0.08] p-3 rounded-xl shadow-xl backdrop-blur-md">
+      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${c.dot}`} />
+        <p className="text-sm font-black text-white">
+          Risco <span className={c.text}>{v}</span>
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export default function RiskPage() {
-  const [counts,       setCounts]       = useState({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
-  const [currentScore, setCurrentScore] = useState(100);
-  const [history,      setHistory]      = useState([]);
-  const [findings,     setFindings]     = useState([]);
-  const [loading,      setLoading]      = useState(true);
+  const [tab, setTab] = useState('compliance');
+  const [currency, setCurrency] = useState('BRL');
 
-  // Hidratação via API
-  useEffect(() => {
-    (async () => {
-      try {
-        // Busca summary (contagens por severidade)
-        const sumRes = await fetch('/api/v1/findings/stats/summary');
-        if (sumRes.ok) {
-          const summary = await sumRes.json();
-          const c = {
-            CRITICAL: summary.by_severity?.CRITICAL || 0,
-            HIGH:     summary.by_severity?.HIGH     || 0,
-            MEDIUM:   summary.by_severity?.MEDIUM   || 0,
-            LOW:      summary.by_severity?.LOW      || 0,
-          };
-          setCounts(c);
+  const [snapshot, setSnapshot] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyNote, setHistoryNote] = useState(null);
+  const [compliance, setCompliance] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
 
-          // Calcula score com base nos contadores
-          const score = Math.max(0, 100 - (c.CRITICAL * 15) - (c.HIGH * 5) - (c.MEDIUM * 2));
-          setCurrentScore(score);
-
-          // Busca lista completa para compliance parser
-          const listRes = await fetch('/api/v1/findings/?page_size=500');
-          if (listRes.ok) {
-            const listJson = await listRes.json();
-            setFindings(listJson.findings || []);
-          }
-
-          // Histórico Evolutivo (mantido no localStorage por ser dado local temporal)
-          const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          let hist = [];
-          try { hist = JSON.parse(localStorage.getItem('previswit_score_history') || '[]'); } catch (_) {}
-
-          if (hist.length === 0) {
-            hist = [
-              { date: '12/07', score: Math.max(0, score - 15) },
-              { date: '13/07', score: Math.max(0, score - 12) },
-              { date: '14/07', score: Math.max(0, score - 10) },
-              { date: '15/07', score: Math.max(0, score - 5)  },
-              { date: '16/07', score: Math.max(0, score - 2)  },
-            ];
-          }
-          const todayIdx = hist.findIndex(h => h.date === today);
-          if (todayIdx >= 0) hist[todayIdx].score = score;
-          else hist.push({ date: today, score });
-          if (hist.length > 30) hist = hist.slice(-30);
-          localStorage.setItem('previswit_score_history', JSON.stringify(hist));
-          setHistory(hist);
-        }
-      } catch (e) {
-        console.error('[RiskPage] Erro ao carregar API:', e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const showToast = useCallback((type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
-  // ── Cálculos Derivados ──────────────────────────────────────────────────
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Grava o snapshot do dia (upsert idempotente) antes de ler o histórico,
+      // para o gráfico já incluir o ponto de hoje.
+      fetch(`${API}/posture/snapshot/record`, { method: 'POST' }).catch(() => {});
 
-  const financialExposure = counts.CRITICAL * 50000;
-  const gradeData = getScoreGrade(currentScore);
+      const [snap, hist, comp] = await Promise.all([
+        jget('/posture/snapshot'),
+        jget('/posture/history?days=30&bucket=day'),
+        jget('/posture/compliance'),
+      ]);
+      setSnapshot(snap);
+      setHistory((hist.history || []).map(h => ({
+        date: h.date_label || String(h.recorded_at || '').slice(0, 10),
+        score: h.score,
+      })));
+      setHistoryNote(hist.legacy_note || null);
+      setCompliance(comp);
+    } catch (e) {
+      setError(`Falha ao carregar postura: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // ── Compliance Parser ───────────────────────────────────────────────────
+  useEffect(() => { load(); }, [load]);
 
-  const complianceIssues = useMemo(() => {
-    const issues = [];
-    const triggerRegex = /secret|key|authentication|sqli|injection|auth/i;
-    
-    findings.forEach(f => {
-      if (triggerRegex.test(f.title) || triggerRegex.test(f.description)) {
-        issues.push(f);
-      }
-    });
-
-    // Filtra únicas pelo título para não poluir
-    const unique = [];
-    const seen = new Set();
-    issues.forEach(i => {
-      if (!seen.has(i.title)) {
-        seen.add(i.title);
-        unique.push(i);
-      }
-    });
-    return unique;
-  }, [findings]);
-
-  const compliancePercentage = Math.max(0, 100 - (complianceIssues.length * 15));
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const score = snapshot?.risk_score ?? 0;
+  const c = riskColors(score);
+  const trend = TREND[snapshot?.trend] || TREND.stable;
+  const sev = snapshot?.findings_by_severity || {};
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-emerald-400" />
-            Métricas de Risco & Conformidade
+            Métricas de Risco &amp; Governança
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Cockpit C-Level · Health Score Evolutivo · Monitoramento ISO 27001 / SOC 2
+            Postura · Conformidade · Radar Regulatório · Simulação de Investimento
           </p>
         </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="p-2.5 rounded-lg border border-white/10 text-gray-500 hover:text-white hover:bg-white/5 hover:border-white/20 transition-all disabled:opacity-40 shrink-0"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
-      {/* ── KPI Cards (Cockpit Executivo) ───────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        
-        {/* Health Score */}
-        <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/90 to-[#060b13]/80 p-6 flex flex-col justify-between">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Shield className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-wider font-bold">Health Score Atual</span>
-            </div>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-lg border ${gradeData.bg} ${gradeData.color} ${gradeData.border}`}>
-              {gradeData.grade}
-            </div>
-          </div>
-          <div className="flex items-end gap-3">
-            <span className={`text-5xl font-black ${gradeData.color} drop-shadow-[0_0_12px_rgba(255,255,255,0.1)]`}>
-              {currentScore}
-            </span>
-            <span className="text-sm font-bold text-gray-500 mb-1">/ 100</span>
-          </div>
-          <p className="text-[10px] text-gray-600 mt-3 font-semibold">
-            {currentScore >= 90 ? 'Excelente postura de segurança.' : currentScore >= 75 ? 'Risco aceitável. Monitoramento ativo.' : 'Alerta: Intervenção necessária.'}
-          </p>
-        </div>
+      {error && <ErrorBanner message={error} />}
+      {loading && !snapshot && <Spinner label="Calculando postura de risco..." />}
 
-        {/* Exposição Financeira */}
-        <div className="rounded-2xl border border-rose-500/20 bg-gradient-to-b from-[#1a0f14]/90 to-[#060b13]/80 p-6 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10" />
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className="flex items-center gap-2 text-rose-500/80">
-              <DollarSign className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-wider font-bold">Exposição Estimada (USD)</span>
-            </div>
-          </div>
-          <div className="flex items-end gap-2 relative z-10">
-            <span className="text-4xl font-black text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.4)]">
-              ${financialExposure.toLocaleString('en-US')}
-            </span>
-          </div>
-          <p className="text-[10px] text-rose-500/70 mt-3 font-semibold relative z-10">
-            Baseado em incidentes críticos (Multas LGPD/Breach)
-          </p>
-        </div>
+      {snapshot && (
+        <>
+          {/* ── Cockpit ─────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Ameaças Ativas */}
-        <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-b from-[#14120e]/90 to-[#060b13]/80 p-6 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10" />
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className="flex items-center gap-2 text-amber-500/80">
-              <ShieldAlert className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-wider font-bold">Ameaças Ativas</span>
-            </div>
-            {counts.CRITICAL > 0 && (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
-                <TrendingUp className="w-3 h-3" /> CRITICAL
-              </span>
-            )}
-          </div>
-          <div className="flex items-end gap-3 relative z-10">
-            <span className="text-4xl font-black text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]">
-              {findings.length}
-            </span>
-            <span className="text-sm font-bold text-gray-500 mb-1">falhas</span>
-          </div>
-          <div className="flex items-center gap-3 mt-3 relative z-10">
-            <span className="text-[10px] font-bold text-rose-400">{counts.CRITICAL} Crit</span>
-            <span className="text-[10px] font-bold text-red-400">{counts.HIGH} High</span>
-            <span className="text-[10px] font-bold text-amber-400">{counts.MEDIUM} Med</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Evolução de Risco (Gráfico) ─────────────────────────────────── */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#030710]/40 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.05] bg-[#060b13]/80">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-bold text-white">Evolução do Risco (Score)</span>
-          </div>
-          <span className="text-[10px] text-gray-600 font-mono">Últimos {history.length} dias</span>
-        </div>
-        
-        <div className="p-6 h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#34d399" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis 
-                dataKey="date" 
-                stroke="rgba(255,255,255,0.2)" 
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-                dy={10}
-              />
-              <YAxis 
-                domain={[0, 100]} 
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Area 
-                type="monotone" 
-                dataKey="score" 
-                stroke="#34d399" 
-                strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorScore)" 
-                activeDot={{ r: 6, fill: '#060b13', stroke: '#34d399', strokeWidth: 3 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* ── Painel de Compliance (ISO 27001 / SOC 2) ────────────────────── */}
-      <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/60 to-[#060b13]/80 overflow-hidden">
-        <div className="flex items-center gap-2 px-6 py-4 border-b border-white/[0.05] bg-[#060b13]/80">
-          <CheckCircle2 className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-bold text-white">Status de Conformidade (ISO 27001 & SOC 2)</span>
-        </div>
-        
-        <div className="p-6">
-          {/* Progress Bar Container */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Adherência Global</span>
-              <span className="text-xs font-black text-white">{compliancePercentage}%</span>
-            </div>
-            <div className="w-full h-2.5 rounded-full bg-white/[0.05] overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-1000 ${
-                  compliancePercentage === 100 ? 'bg-emerald-500' : compliancePercentage >= 70 ? 'bg-amber-500' : 'bg-rose-500'
-                }`}
-                style={{ width: `${compliancePercentage}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Violações / Ok State */}
-          {complianceIssues.length === 0 ? (
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <Shield className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-emerald-400">100% — Em Conformidade</p>
-                <p className="text-[10px] text-emerald-500/70 font-semibold mt-0.5">Nenhuma violação crítica de controle detectada.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500">Violações de Controle Detectadas</p>
-              {complianceIssues.slice(0, 5).map((issue, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] group hover:bg-white/[0.04] transition-colors">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-gray-200 truncate">{issue.title}</p>
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      Potencial quebra de requisitos de autenticação/criptografia (ISO 27001 A.9 / A.10).
-                    </p>
+            {/* Score */}
+            <div className={`rounded-2xl border ${c.border} bg-gradient-to-b from-[#0d1421]/90 to-[#060b13]/70 p-6 flex flex-col justify-between relative overflow-hidden`}>
+              <div className={`absolute top-0 right-0 w-32 h-32 ${c.bg} rounded-full blur-3xl -mr-10 -mt-10`} />
+              <div className="relative z-10">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <ShieldAlert className="w-4 h-4" />
+                    <span className="text-[10px] uppercase tracking-wider font-bold">Risco Atual</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold ${c.bg} ${c.text} ${c.border}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+                    {snapshot.risk_level}
+                  </span>
                 </div>
-              ))}
-              {complianceIssues.length > 5 && (
-                <p className="text-[10px] text-center text-gray-600 mt-2 font-bold">+ {complianceIssues.length - 5} outras violações não exibidas</p>
+
+                <div className="flex items-end gap-3">
+                  <span className={`text-5xl font-black ${c.text} ${c.glow} leading-none`}>{score}</span>
+                  <span className="text-sm font-bold text-gray-600 mb-1">/ 100</span>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1 font-medium">
+                  quanto menor, melhor
+                </p>
+
+                <div className="mt-3">
+                  <Bar pct={score} className={c.bar} height="h-1.5" />
+                </div>
+
+                <div className="flex items-center gap-2 mt-3">
+                  <trend.icon className={`w-3.5 h-3.5 ${trend.text}`} />
+                  <span className={`text-[11px] font-bold ${trend.text}`}>{trend.label}</span>
+                  {snapshot.trend_basis === 'comparable_snapshot' && snapshot.trend_delta !== 0 ? (
+                    <span className="text-[10px] text-gray-600">
+                      ({snapshot.trend_delta > 0 ? '+' : ''}{snapshot.trend_delta} em 7 dias)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-gray-600">
+                      (sem base comparável ainda)
+                    </span>
+                  )}
+                </div>
+
+                {snapshot.floor_applied && (
+                  <p className="text-[10px] text-amber-400/70 mt-2 leading-relaxed">
+                    {snapshot.floor_reason}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Findings */}
+            <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0d1421]/80 to-[#060b13]/60 p-6 flex flex-col">
+              <div className="flex items-center gap-2 text-gray-500 mb-4">
+                <Layers className="w-4 h-4" />
+                <span className="text-[10px] uppercase tracking-wider font-bold">Findings Abertos</span>
+              </div>
+              <div className="flex items-end gap-3">
+                <span className="text-4xl font-black text-white leading-none">{snapshot.open_findings}</span>
+                <span className="text-xs text-gray-600 mb-1">únicos</span>
+              </div>
+
+              <div className="flex items-center gap-3 mt-3 flex-wrap">
+                {[
+                  ['CRITICAL', 'text-rose-400', sev.CRITICAL],
+                  ['HIGH', 'text-red-400', sev.HIGH],
+                  ['MEDIUM', 'text-amber-400', sev.MEDIUM],
+                  ['LOW', 'text-blue-400', sev.LOW],
+                ].filter(([, , v]) => v > 0).map(([k, cls, v]) => (
+                  <span key={k} className={`text-[11px] font-bold ${cls}`}>
+                    {v} {k.slice(0, 4).toLowerCase()}
+                  </span>
+                ))}
+              </div>
+
+              {snapshot.deduplication?.collapsed > 0 && (
+                <p className="text-[10px] text-gray-600 mt-3 leading-relaxed">
+                  {snapshot.deduplication.collapsed} duplicata
+                  {snapshot.deduplication.collapsed !== 1 ? 's' : ''} de rescan colapsada
+                  {snapshot.deduplication.collapsed !== 1 ? 's' : ''}
+                  {' '}({snapshot.deduplication.raw} registros brutos)
+                </p>
+              )}
+
+              <div className="mt-auto pt-3 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-gray-600 uppercase tracking-wider font-bold">Evidência:</span>
+                {(snapshot.tools_present || []).map(t => (
+                  <span key={t} className="text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* KEV */}
+            <div className={`rounded-2xl border ${snapshot.kev?.match_count > 0 ? 'border-rose-500/25' : 'border-white/[0.06]'} bg-gradient-to-b from-[#0d1421]/80 to-[#060b13]/60 p-6 flex flex-col`}>
+              <div className="flex items-center gap-2 text-gray-500 mb-4">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-[10px] uppercase tracking-wider font-bold">Exploração Ativa (KEV)</span>
+              </div>
+
+              {!snapshot.kev?.available ? (
+                <>
+                  <p className="text-sm text-gray-500">Enriquecimento indisponível</p>
+                  <p className="text-[10px] text-gray-600 mt-2 leading-relaxed">
+                    O catálogo KEV da CISA não pôde ser consultado. O score foi calculado
+                    sem esse fator — nenhum número foi alterado em silêncio.
+                  </p>
+                </>
+              ) : snapshot.kev.match_count > 0 ? (
+                <>
+                  <div className="flex items-end gap-3">
+                    <span className="text-4xl font-black text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.4)] leading-none">
+                      {snapshot.kev.match_count}
+                    </span>
+                    <span className="text-xs text-gray-500 mb-1">CVEs sob ataque</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {snapshot.kev.matches.slice(0, 4).map(cve => (
+                      <span key={cve} className="text-[10px] font-mono text-rose-300 bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 rounded">
+                        {cve}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-auto pt-3 leading-relaxed">
+                    Exploração confirmada em campo pela CISA. Estes findings recebem
+                    peso maior no cálculo.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <span className="text-sm font-bold text-emerald-400">Nenhuma correspondência</span>
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-2 leading-relaxed">
+                    Nenhuma das suas CVEs consta no catálogo de exploração ativa
+                    ({snapshot.kev.count?.toLocaleString('pt-BR')} CVEs monitoradas).
+                  </p>
+                </>
               )}
             </div>
+          </div>
+
+          {/* ── Evolução ────────────────────────────────────────────── */}
+          <Panel
+            title="Evolução do risco"
+            icon={<TrendingUp className="w-4 h-4 text-emerald-400" />}
+            right={
+              <span className="text-[10px] text-gray-600 font-mono">
+                {history.length} dia{history.length !== 1 ? 's' : ''} · 1 ponto/dia
+              </span>
+            }
+          >
+            <div className="p-5 h-[260px] w-full">
+              {history.length < 2 ? (
+                <div className="h-full flex flex-col items-center justify-center gap-2">
+                  <p className="text-sm text-gray-500">Histórico insuficiente</p>
+                  <p className="text-[11px] text-gray-600 text-center max-w-sm leading-relaxed">
+                    A série é construída a partir de snapshots reais gravados no servidor,
+                    um por dia. Ela ganha forma conforme a plataforma é usada.
+                  </p>
+                  {historyNote && (
+                    <p className="text-[10px] text-amber-400/70 text-center max-w-md leading-relaxed mt-1">
+                      {historyNote}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                           tickLine={false} axisLine={false} dy={10} />
+                    <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                           tickLine={false} axisLine={false} />
+                    <Tooltip content={<HistoryTooltip />} />
+                    <Area type="monotone" dataKey="score" stroke="#f43f5e" strokeWidth={2.5}
+                          fillOpacity={1} fill={`url(#${GRADIENT_ID})`}
+                          activeDot={{ r: 5, fill: '#060b13', stroke: '#f43f5e', strokeWidth: 2.5 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Panel>
+
+          {/* ── Abas ────────────────────────────────────────────────── */}
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 w-fit">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  tab === t.id
+                    ? 'bg-white/10 text-white border border-white/15'
+                    : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                }`}
+              >
+                <t.icon className="w-3.5 h-3.5" />
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'compliance' && (
+            <ComplianceTab data={compliance} loading={loading} error={null} onToast={showToast} />
           )}
+          {tab === 'simulator' && (
+            <SimulatorTab currency={currency} onCurrencyChange={setCurrency} onToast={showToast} />
+          )}
+          {tab === 'radar' && <RadarTab onToast={showToast} />}
+          {tab === 'plan' && <ActionPlanTab currency={currency} onToast={showToast} />}
+        </>
+      )}
 
+      {/* ── Toast ──────────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[500] flex items-center gap-2 px-4 py-3 rounded-lg shadow-2xl border backdrop-blur-md text-xs font-medium animate-in slide-in-from-top-2 ${
+          toast.type === 'error'
+            ? 'bg-red-950/90 border-red-500/40 text-red-200'
+            : 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+        }`}>
+          {toast.type === 'error'
+            ? <XCircle className="w-4 h-4 shrink-0" />
+            : <CheckCircle className="w-4 h-4 shrink-0" />}
+          {toast.msg}
         </div>
-      </div>
-
+      )}
     </div>
   );
 }

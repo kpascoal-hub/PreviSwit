@@ -22,6 +22,92 @@ import { ArrowLeft, GitCommit, User, Clock, ShieldAlert, ChevronRight, FileCode,
 
 const API = '/api/v1';
 
+// Renderer de markdown inline — sem dependência externa
+function MarkdownText({ text = '', className = '' }) {
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Bloco de código
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <pre key={i} className="my-2 p-3 rounded-lg bg-[#0d1421] border border-white/10 text-[11px] text-emerald-300 font-mono overflow-x-auto whitespace-pre-wrap break-words">
+          {lang && <span className="text-gray-500 text-[9px] block mb-1">{lang}</span>}
+          {codeLines.join('\n')}
+        </pre>
+      );
+      i++;
+      continue;
+    }
+
+    // Headings
+    if (/^#{1,3} /.test(line)) {
+      const level = line.match(/^(#{1,3}) /)[1].length;
+      const content = line.replace(/^#{1,3} /, '');
+      const cls = level === 1 ? 'text-[14px] font-bold text-white mt-3 mb-1'
+                : level === 2 ? 'text-[13px] font-semibold text-indigo-200 mt-2 mb-1'
+                              : 'text-[12px] font-semibold text-gray-200 mt-1';
+      elements.push(<p key={i} className={cls}>{inlineMarkdown(content)}</p>);
+      i++; continue;
+    }
+
+    // Lista
+    if (/^[*\-•] /.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[*\-•] /.test(lines[i])) {
+        items.push(<li key={i} className="ml-3">{inlineMarkdown(lines[i].replace(/^[*\-•] /, ''))}</li>);
+        i++;
+      }
+      elements.push(<ul key={`ul-${i}`} className="list-disc list-inside space-y-0.5 my-1 text-[13px]">{items}</ul>);
+      continue;
+    }
+
+    // Linha horizontal
+    if (/^---+$/.test(line.trim())) {
+      elements.push(<hr key={i} className="border-white/10 my-2" />);
+      i++; continue;
+    }
+
+    // Parágrafo vazio
+    if (line.trim() === '') {
+      elements.push(<div key={i} className="h-1" />);
+      i++; continue;
+    }
+
+    // Parágrafo normal
+    elements.push(<p key={i} className="text-[13px] leading-relaxed">{inlineMarkdown(line)}</p>);
+    i++;
+  }
+
+  return <div className={`space-y-0.5 break-words ${className}`}>{elements}</div>;
+}
+
+function inlineMarkdown(text) {
+  const parts = [];
+  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2]) parts.push(<strong key={m.index}><em>{m[2]}</em></strong>);
+    else if (m[3]) parts.push(<strong key={m.index} className="text-white font-semibold">{m[3]}</strong>);
+    else if (m[4]) parts.push(<em key={m.index} className="italic text-gray-300">{m[4]}</em>);
+    else if (m[5]) parts.push(<code key={m.index} className="px-1 py-0.5 rounded bg-white/10 text-emerald-300 font-mono text-[11px]">{m[5]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 export default function RiskGraphCanvas({ repo, onBack }) {
   const [commits, setCommits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +144,7 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   const [chatInput, setChatInput] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const chatEndRef = useRef(null); // Ancora de auto-scroll
+  const [annotWizard, setAnnotWizard] = useState(null); // { step, data }
 
   // SAST Analysis States
   const [sastResults, setSastResults] = useState({});     // { [sha]: { vulnerable, severity, analysis, tools_used, loading } }
@@ -614,23 +701,241 @@ export default function RiskGraphCanvas({ repo, onBack }) {
   };
 
 
-  // ─── Extrator de Contexto: Gera JSON estruturado dos commits visíveis na tela ───
-  // Esquema: [{ hash, autor, data, mensagem, branch, tipo }]
-  // Reutilizável por outros agentes da plataforma que precisem do mesmo snapshot.
+  // ─── Extrator de achados: normaliza scanner_results dos 4 scanners ───────────
+  // Espelha core/ai_chat._extract_findings no backend.
+  const extractFindingsFromScan = (sr) => {
+    const out = [];
+    if (!sr || typeof sr !== 'object') return out;
+
+    // Forma já normalizada: array de { tool, file, rule, severity }.
+    // A UI do widget também trata esse caso (Array.isArray), então o extrator precisa tratar.
+    if (Array.isArray(sr)) {
+      for (const f of sr) {
+        if (f && typeof f === 'object') {
+          out.push({
+            tool: f.tool || f.scanner || '?',
+            arquivo: f.file || f.arquivo || f.path || '?',
+            regra: f.rule || f.regra || f.check_id || f.title || 'Achado',
+            severidade: f.severity || f.severidade || '',
+            linha: f.line ?? f.linha ?? null,
+          });
+        }
+      }
+      return out;
+    }
+
+    // Trivy — apenas HIGH/CRITICAL
+    if (sr.trivy && typeof sr.trivy === 'object') {
+      for (const r of (sr.trivy.Results || [])) {
+        for (const v of (r.Vulnerabilities || [])) {
+          if (['HIGH', 'CRITICAL'].includes(String(v.Severity || '').toUpperCase())) {
+            out.push({
+              tool: 'Trivy', arquivo: r.Target || '?',
+              regra: v.VulnerabilityID || v.Title || 'Vuln',
+              severidade: v.Severity, pacote: v.PkgName,
+              versao_corrigida: v.FixedVersion || null,
+            });
+          }
+        }
+      }
+    }
+
+    // Semgrep
+    if (sr.semgrep && typeof sr.semgrep === 'object') {
+      for (const r of (sr.semgrep.results || [])) {
+        out.push({
+          tool: 'Semgrep', arquivo: r.path || '?',
+          regra: r.check_id || 'Vuln',
+          severidade: r.extra?.severity || '',
+          linha: r.start?.line ?? null,
+          detalhe: String(r.extra?.message || '').slice(0, 200),
+        });
+      }
+    }
+
+    // Gitleaks
+    if (Array.isArray(sr.gitleaks)) {
+      for (const r of sr.gitleaks) {
+        if (r && typeof r === 'object') {
+          out.push({
+            tool: 'Gitleaks', arquivo: r.File || '?',
+            regra: r.Description || 'Segredo vazado',
+            severidade: 'CRITICAL', linha: r.StartLine ?? null,
+          });
+        }
+      }
+    }
+
+    // Checkov
+    const ckReports = Array.isArray(sr.checkov) ? sr.checkov : [sr.checkov];
+    for (const rep of ckReports) {
+      if (rep && typeof rep === 'object') {
+        for (const fc of (rep.results?.failed_checks || [])) {
+          out.push({
+            tool: 'Checkov', arquivo: fc.file_path || '?',
+            regra: fc.check_name || fc.check_id || 'Check falhou',
+            severidade: fc.severity || 'MEDIUM',
+          });
+        }
+      }
+    }
+
+    return out;
+  };
+
+  // ─── Extrator de Contexto: JSON estruturado dos commits do Mapa Mental ───────
+  // Lê direto do state React (não do DOM) para incluir os resultados SAST —
+  // o DOM só carrega metadados e perdia 100% dos achados de vulnerabilidade.
   const extractCommitsToJSON = () => {
-    const commitCards = document.querySelectorAll('[data-commit="true"]');
-    const commitArray = [];
-    commitCards.forEach(card => {
-      commitArray.push({
-        hash:     card.getAttribute('data-sha')      || card.getAttribute('data-hash') || "",
-        autor:    card.getAttribute('data-author')   || "",
-        data:     card.getAttribute('data-date')     || "",
-        mensagem: card.getAttribute('data-message')  || "",
-        branch:   card.getAttribute('data-branch')   || "",
-        tipo:     card.getAttribute('data-type')     || (card.getAttribute('data-is-main') === 'true' ? 'main' : 'pr'),
-      });
+    const source = (visibleCommits && visibleCommits.length) ? visibleCommits : commits;
+    return (source || []).map(c => {
+      const sast = sastResults[c.sha] || {};
+      const sr = c.scanner_results || sast.scanner_results || null;
+      const achados = extractFindingsFromScan(sr);
+      return {
+        hash:          c.sha,
+        hash_curto:    String(c.sha || '').slice(0, 8),
+        autor:         c.author || '',
+        data:          c.date || '',
+        mensagem:      c.message || '',
+        branch:        c.branch_name || '',
+        tipo:          c.is_pending_auth ? 'pr' : 'main',
+        scan_executado: !!sr,
+        vulneravel:    sast.vulnerable === true,
+        severidade:    sast.severity || (achados.length ? 'HIGH' : 'CLEAN'),
+        marcado_corrigido: fixedCommits[c.sha] === true,
+        total_achados: achados.length,
+        achados:       achados.slice(0, 15),
+        analise_ia:    sast.analysis ? String(sast.analysis).slice(0, 600) : null,
+      };
     });
-    return commitArray;
+  };
+
+  const _scrollChatEnd = () => setTimeout(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const c = document.getElementById('chat-messages-container');
+    if (c) c.scrollTop = c.scrollHeight;
+  }, 100);
+
+  const _confirmAnnotation = async (data) => {
+    try {
+      const res = await fetch(`${API}/posture/annotations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          body: data.context || '',
+          kind: data.kind || 'note',
+          scope: 'global',
+          author: data.author || 'Chat IA',
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setChatMessages(prev => [...prev, {
+        role: 'wizard', step: 'done', data: { title: data.title },
+      }]);
+      setAnnotWizard(null);
+      _scrollChatEnd();
+    } catch (e) {
+      setChatMessages(prev => [...prev, {
+        role: 'assistant', content: `⚠️ Erro ao salvar anotação: ${e.message}`,
+      }]);
+    }
+  };
+
+  const handleWizardStep = async (text) => {
+    if (!annotWizard) return;
+    const { step, data } = annotWizard;
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', content: text }]);
+    _scrollChatEnd();
+
+    if (step === 'manual_title') {
+      const updated = { ...data, title: text };
+      setAnnotWizard({ step: 'manual_context', data: updated });
+      setChatMessages(prev => [...prev, {
+        role: 'wizard', step: 'manual_context',
+        content: `Título: **"${text}"**\n\nAgora descreva o contexto desta anotação (motivação, risco envolvido, etc.):`,
+      }]);
+      _scrollChatEnd();
+      return;
+    }
+    if (step === 'manual_context') {
+      const updated = { ...data, context: text };
+      setAnnotWizard({ step: 'manual_note', data: updated });
+      setChatMessages(prev => [...prev, {
+        role: 'wizard', step: 'manual_note',
+        content: 'Tipo da anotação:\n• **note** — observação\n• **risk_acceptance** — aceite formal\n• **evidence** — evidência de controle\n\n(Enter para usar "note")',
+      }]);
+      _scrollChatEnd();
+      return;
+    }
+    if (step === 'manual_note') {
+      const kind = ['risk_acceptance', 'evidence', 'compensating_control'].includes(text.trim().toLowerCase())
+        ? text.trim().toLowerCase() : 'note';
+      const updated = { ...data, kind };
+      setAnnotWizard({ step: 'preview', data: updated });
+      setChatMessages(prev => [...prev, { role: 'wizard', step: 'preview', data: updated }]);
+      _scrollChatEnd();
+      return;
+    }
+  };
+
+  const triggerAiAutoAnnotation = async () => {
+    const geminiKey = sessionStorage.getItem('gemini_api_key');
+    if (!geminiKey) { alert('Configure a chave Gemini em Integrações.'); return; }
+
+    setAnnotWizard({ step: 'ai_generating', data: {} });
+    setChatMessages(prev => [...prev, { role: 'wizard', step: 'ai_generating' }]);
+    setIsAiThinking(true);
+    _scrollChatEnd();
+
+    const commitsJSON = extractCommitsToJSON();
+    const topCommits = commitsJSON.slice(0, 8).map(c =>
+      `${c.sha?.slice(0,7) || ''} ${c.author || ''}: ${c.message?.slice(0, 100) || ''}`
+    ).join('\n');
+
+    const prompt =
+`Com base nos commits recentes do repositório, gere uma anotação de risco concisa.
+Responda EXATAMENTE neste JSON, sem texto extra:
+{"title":"<título em 1 linha>","context":"<contexto em 2-3 frases>","kind":"note"}
+
+Commits:
+${topCommits || 'Nenhum commit disponível.'}`;
+
+    try {
+      const res = await fetch(`${API}/ai/insight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      const raw = d.response || '';
+
+      let parsed;
+      try {
+        const m = raw.match(/\{[\s\S]*\}/);
+        parsed = m ? JSON.parse(m[0]) : null;
+      } catch { parsed = null; }
+
+      if (!parsed?.title) {
+        parsed = { title: `Análise de risco — ${repo?.name || 'repositório'}`, context: raw.slice(0, 300), kind: 'note' };
+      }
+      parsed.author = 'IA (auto)';
+
+      setAnnotWizard({ step: 'preview', data: parsed });
+      setChatMessages(prev => {
+        const filtered = prev.filter(m => !(m.role === 'wizard' && m.step === 'ai_generating'));
+        return [...filtered, { role: 'wizard', step: 'preview', data: parsed }];
+      });
+    } catch (e) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Erro na IA: ${e.message}` }]);
+      setAnnotWizard(null);
+    } finally {
+      setIsAiThinking(false);
+      _scrollChatEnd();
+    }
   };
 
   const sendAIQuery = async (promptText) => {
@@ -640,6 +945,27 @@ export default function RiskGraphCanvas({ repo, onBack }) {
 
     if (!geminiKey) {
       alert("⚠️ Configuração Pendente: Insira sua GEMINI_API_KEY na aba de Integrações.");
+      return;
+    }
+
+    // Intercept wizard steps
+    if (annotWizard && ['manual_title', 'manual_context', 'manual_note'].includes(annotWizard.step)) {
+      await handleWizardStep(promptText);
+      return;
+    }
+
+    // Detecta intent de anotação
+    const isAnnotIntent = /anota[çc][aã]o|anotar|fazer anota|criar anota|nova anota|registrar risco|risk note/i.test(promptText);
+    if (isAnnotIntent && !annotWizard) {
+      setChatInput('');
+      setIsCopilotMenuOpen(false);
+      setIsChatPanelOpen(true);
+      setChatMessages(prev => [...prev,
+        { role: 'user', content: promptText },
+        { role: 'wizard', step: 'choose' },
+      ]);
+      setAnnotWizard({ step: 'choose', data: {} });
+      _scrollChatEnd();
       return;
     }
 
@@ -657,10 +983,25 @@ export default function RiskGraphCanvas({ repo, onBack }) {
     // session_id é o identificador único da sessão de memória deste repositório
     const sessionId = `${repo.owner}_${repo.name}`.replace(/[^a-zA-Z0-9-_.]/g, '_');
 
-    // Extração de Contexto: monta JSON estruturado dos commits visíveis no Mapa Mental
+    // Extração de Contexto: monta JSON estruturado dos commits do Mapa Mental,
+    // já incluindo os achados SAST reais de cada commit.
     const commitsJSON = extractCommitsToJSON();
-    const screenContext = JSON.stringify(commitsJSON, null, 2);
-    console.log(`[DEBUG IA] Commits extraídos para contexto: ${commitsJSON.length} cards encontrados.`);
+    const escaneados  = commitsJSON.filter(c => c.scan_executado);
+    const vulneraveis = commitsJSON.filter(c => c.vulneravel);
+    const totalAchados = commitsJSON.reduce((s, c) => s + c.total_achados, 0);
+
+    const screenContext = JSON.stringify({
+      repositorio: `${repo.owner}/${repo.name}`,
+      resumo: {
+        total_commits_no_mapa: commitsJSON.length,
+        commits_com_scan_sast: escaneados.length,
+        commits_vulneraveis:   vulneraveis.length,
+        total_achados_sast:    totalAchados,
+      },
+      commits: commitsJSON,
+    }, null, 2);
+
+    console.log(`[DEBUG IA] Contexto: ${commitsJSON.length} commits, ${escaneados.length} com scan, ${totalAchados} achados.`);
 
     try {
       const res = await fetch(`${API}/ai/chat`, {
@@ -1059,10 +1400,91 @@ export default function RiskGraphCanvas({ repo, onBack }) {
 
             {/* Messages */}
             <div id="chat-messages-container" className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-              {chatMessages.map((msg, i) => (
+              {chatMessages.map((msg, i) => {
+                if (msg.role === 'wizard') {
+                  const kindLabel = { note: 'Observação', risk_acceptance: 'Aceite de Risco', evidence: 'Evidência', compensating_control: 'Controle Compensatório' };
+                  if (msg.step === 'choose') return (
+                    <div key={i} className="flex flex-col items-start">
+                      <div className="max-w-[92%] p-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-slate-700 space-y-2">
+                        <p className="text-[13px] text-gray-300">Como você quer criar a anotação?</p>
+                        <button onClick={triggerAiAutoAnnotation}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/35 border border-violet-500/30 text-left transition-all">
+                          <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                          <div><p className="text-[12px] font-semibold text-violet-300">IA cria automaticamente</p>
+                          <p className="text-[10px] text-gray-500">Baseada nos commits visíveis</p></div>
+                        </button>
+                        <button onClick={() => {
+                            setAnnotWizard({ step: 'manual_title', data: {} });
+                            setChatMessages(prev => [...prev, { role: 'wizard', step: 'manual_context', content: 'Qual será o **título** desta anotação?' }]);
+                            _scrollChatEnd();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 border border-white/10 text-left transition-all">
+                          <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <div><p className="text-[12px] font-semibold text-gray-300">Criar manualmente</p>
+                          <p className="text-[10px] text-gray-500">Você digita título e contexto</p></div>
+                        </button>
+                        <button onClick={() => { setAnnotWizard(null); setChatMessages(prev => [...prev, { role: 'assistant', content: 'Ok, cancelado!' }]); }}
+                          className="text-[10px] text-gray-600 hover:text-gray-400 px-1">Cancelar</button>
+                      </div>
+                    </div>
+                  );
+                  if (msg.step === 'manual_context' || msg.step === 'manual_note') return (
+                    <div key={i} className="flex flex-col items-start">
+                      <div className="max-w-[92%] p-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-violet-500/30 text-gray-200">
+                        <MarkdownText text={msg.content} />
+                      </div>
+                    </div>
+                  );
+                  if (msg.step === 'ai_generating') return (
+                    <div key={i} className="flex flex-col items-start">
+                      <div className="p-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-violet-500/30 text-[13px] text-gray-400 flex items-center gap-2">
+                        <div className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                        Gerando anotação com IA…
+                      </div>
+                    </div>
+                  );
+                  if (msg.step === 'preview' && msg.data) return (
+                    <div key={i} className="flex flex-col items-start">
+                      <div className="max-w-[92%] p-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-violet-500/30 space-y-2">
+                        <p className="text-[11px] text-gray-400">Pré-visualização:</p>
+                        <div className="p-2.5 rounded-lg bg-violet-500/10 border border-violet-500/20 space-y-1">
+                          <p className="text-[13px] font-semibold text-white">{msg.data.title}</p>
+                          {msg.data.context && <p className="text-[11px] text-gray-400">{msg.data.context}</p>}
+                          <span className="inline-block text-[9px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            {kindLabel[msg.data.kind] || msg.data.kind || 'note'}
+                          </span>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => _confirmAnnotation(msg.data)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all">
+                            ✓ Confirmar
+                          </button>
+                          <button onClick={() => { setAnnotWizard(null); setChatMessages(prev => [...prev, { role: 'assistant', content: 'Anotação cancelada.' }]); }}
+                            className="px-3 py-1.5 rounded-lg text-[11px] text-gray-500 hover:text-white transition-all">
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  if (msg.step === 'done') return (
+                    <div key={i} className="flex flex-col items-start">
+                      <div className="max-w-[92%] p-3 rounded-2xl rounded-tl-sm bg-emerald-900/30 border border-emerald-500/30">
+                        <p className="text-[13px] text-emerald-300 font-semibold">✓ Anotação criada!</p>
+                        {msg.data?.title && <p className="text-[11px] text-gray-400 mt-0.5">"{msg.data.title}"</p>}
+                        <p className="text-[10px] text-gray-600 mt-1">Disponível em Métricas de Risco → Plano de Ação.</p>
+                      </div>
+                    </div>
+                  );
+                  return null;
+                }
+                return (
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div className={`max-w-[90%] p-3 text-[13px] leading-relaxed shadow-md ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 'bg-slate-800 text-gray-200 border border-slate-700 rounded-2xl rounded-tl-sm'}`}>
-                    <pre className="whitespace-pre-wrap font-sans break-words">{msg.content}</pre>
+                    {msg.role === 'user'
+                      ? <p className="whitespace-pre-wrap break-words text-[13px]">{msg.content}</p>
+                      : <MarkdownText text={msg.content} />
+                    }
                     {msg.relatedSha && (
                       <button
                         onClick={() => {
@@ -1087,7 +1509,8 @@ export default function RiskGraphCanvas({ repo, onBack }) {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {isAiThinking && (
                 <div className="flex items-start">
                   <div className="p-4 rounded-2xl rounded-tl-sm bg-slate-800 text-gray-400 border border-slate-700 flex items-center gap-1.5 shadow-md">

@@ -22,6 +22,7 @@ Suporta chamadas stateless (generate_insight) e chats com memória
 persistente por session_id (chat_with_memory).
 """
 import os
+import re
 import json
 import logging
 import asyncio
@@ -42,6 +43,14 @@ except ImportError:
 _MEMORY_DIR = Path(__file__).parent.parent / "data"
 _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
+# Mensagens puramente sociais — as únicas que dispensam o contexto do Mapa Mental.
+_SOCIAL_RE = re.compile(
+    r"^\s*(oi+|ol[áa]|e a[íi]|hey|hi|bom dia|boa tarde|boa noite|tudo bem|tudo certo|"
+    r"obrigad[oa]|valeu|vlw|tchau|at[ée] mais|ok|okay|blz|beleza|legal|show|entendi|"
+    r"perfeito|top|massa)\s*[.!?…]*\s*$",
+    re.I,
+)
+
 _SYSTEM_INSTRUCTION = (
     "Você é o Gemini Security Copilot da plataforma PreviSwit AI-ASPM — "
     "um assistente especialista em Application Security Posture Management (ASPM), "
@@ -52,9 +61,11 @@ _SYSTEM_INSTRUCTION = (
     "problemas de qualidade e boas práticas de segurança. "
     "REGRA ABSOLUTA: Você NÃO é um scanner de código. NUNCA deduza ou invente "
     "falhas de segurança baseando-se apenas em títulos de commits ou mensagens de texto. "
-    "Se o usuário perguntar sobre vulnerabilidades gerais, e você não tiver um JSON com "
-    "resultados de ferramentas SAST (Semgrep/Trivy) no contexto, afirme categoricamente "
-    "que precisa que ele execute a Análise SAST real nas Ações Rápidas primeiro."
+    "PORÉM: quando o contexto trouxer commits com `scan_executado: true` e uma lista "
+    "`achados[]`, esses são resultados SAST REAIS já produzidos por Semgrep/Trivy/Gitleaks/"
+    "Checkov — use-os com confiança, cite ferramenta, arquivo, regra e severidade, e NÃO "
+    "peça para o usuário rodar a análise novamente. Só oriente rodar a Análise SAST nas "
+    "Ações Rápidas para os commits que estiverem com `scan_executado: false`."
 )
 
 
@@ -94,37 +105,47 @@ class MapaMentalAgent:
         """
         Gera um insight único sem guardar histórico.
         Ideal para resumos de repositórios e análises pontuais de commits.
+        Tenta até 3 vezes em caso de 503 (Gemini temporariamente indisponível).
         """
         if not self.is_available:
             return self._unavailable_msg()
-            
+
         if not api_key:
             return "⚠️ Chave do Gemini não fornecida. Configure em Integrações."
 
         sys_instr = system_instruction or _SYSTEM_INSTRUCTION
+        client = genai.Client(api_key=api_key)
 
-        try:
-            client = genai.Client(api_key=api_key)
-            response = await asyncio.to_thread(
-                client.models.generate_content,
-                model=self._model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=sys_instr,
-                    temperature=0.3,
-                    max_output_tokens=2048,
-                ),
-            )
-            return response.text.strip()
-        except Exception as e:
-            err = str(e)
-            logger.error(f"generate_insight falhou: {err}")
-            # Tratamento de erros específicos da API
-            if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                return "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
-            if "503" in err or "UNAVAILABLE" in err:
-                return "⚠️ Serviço Gemini temporariamente indisponível. Tente novamente em instantes."
-            return f"⚠️ Erro ao consultar IA: {err}"
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model=self._model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=sys_instr,
+                        temperature=0.3,
+                        max_output_tokens=4096,
+                    ),
+                )
+                return response.text.strip()
+            except Exception as e:
+                err = str(e)
+                is_503 = "503" in err or "UNAVAILABLE" in err
+                is_429 = "429" in err or "RESOURCE_EXHAUSTED" in err
+
+                if is_503 and attempt < 2:
+                    wait = 2 ** attempt  # 1s, 2s
+                    logger.warning(f"generate_insight 503 (tentativa {attempt+1}/3) — aguardando {wait}s")
+                    await asyncio.sleep(wait)
+                    continue
+
+                logger.error(f"generate_insight falhou: {err}")
+                if is_429:
+                    return "⚠️ Limite de requisições atingido. Aguarde alguns segundos e tente novamente."
+                if is_503:
+                    return "⚠️ Serviço Gemini temporariamente indisponível. Tente novamente em instantes."
+                return f"⚠️ Erro ao consultar IA: {err}"
 
     # ── Método 2: Stateful com memória persistente ────────────────────────────
 
@@ -176,12 +197,12 @@ class MapaMentalAgent:
         for msg in history:
             contents.append(msg)
             
-        # Roteamento de Intenção (Intent Routing) para economia de tokens
-        keywords = ["commit", "sast", "analise", "vulnerabilidade", "falha", "risco", "resumo", "mapa", "cve", "análise"]
-        prompt_lower = prompt.lower()
-        needs_context = True
-        if len(prompt) < 10 or not any(kw in prompt_lower for kw in keywords):
-            needs_context = False
+        # Roteamento de Intenção (Intent Routing).
+        # Antes usava allowlist de keywords + len(prompt) < 10, o que descartava o
+        # contexto em perguntas de acompanhamento ("e esse aí?", "quais?") e fazia a
+        # IA negar ter acesso aos dados. Agora só mensagens puramente sociais
+        # dispensam o contexto — qualquer pergunta real recebe o snapshot completo.
+        needs_context = bool(context and context.strip()) and not _SOCIAL_RE.match(prompt)
 
         final_prompt = prompt
         current_system_instruction = _SYSTEM_INSTRUCTION
@@ -197,18 +218,37 @@ class MapaMentalAgent:
                 logger.warning(f"[Cache Efêmero] Falha ao salvar cache: {cache_err}")
 
             final_prompt = (
-                "REGRA ABSOLUTA: O histórico da árvore de commits do repositório atual foi atualizado "
-                "e está estruturado em formato JSON abaixo. Você DEVE assimilar as informações detalhadas "
-                "deste JSON (autor, hash, datas, mensagens) para responder à pergunta do usuário. "
-                "Você DEVE basear sua resposta EXCLUSIVAMENTE nos dados fornecidos no [CONTEXTO VISUAL DA TELA] abaixo. "
-                "NUNCA sugira ao usuário acessar o GitHub, repositórios externos ou usar outras ferramentas. "
-                "Se a resposta para a pergunta não estiver no contexto abaixo, diga apenas que as informações "
-                "não estão visíveis no mapa atual.\n\n"
-                f"[CONTEXTO VISUAL DA TELA — JSON DE COMMITS]\n{context}\n\n"
+                "REGRA ABSOLUTA: O snapshot atual do Mapa Mental do repositório está no JSON abaixo. "
+                "Ele é a sua ÚNICA fonte de verdade e você TEM acesso completo a ele.\n\n"
+                "Estrutura do JSON:\n"
+                "- `resumo`: contagens agregadas (commits no mapa, quantos têm scan SAST, quantos são "
+                "vulneráveis, total de achados).\n"
+                "- `commits[]`: cada commit com `hash`, `hash_curto`, `autor`, `data`, `mensagem`, "
+                "`branch`, `tipo` (main/pr).\n"
+                "- `commits[].scan_executado`: se `true`, esse commit JÁ passou pelos scanners reais "
+                "(Semgrep, Trivy, Gitleaks, Checkov).\n"
+                "- `commits[].achados[]`: os RESULTADOS SAST REAIS — `tool`, `arquivo`, `regra`, "
+                "`severidade`, `pacote`, `linha`. Estes são achados verificados por ferramenta, "
+                "NÃO deduções. Trate-os como fato e cite-os livremente.\n"
+                "- `commits[].vulneravel`, `severidade`, `total_achados`, `analise_ia`.\n\n"
+                "COMO RESPONDER:\n"
+                "1. Se o commit perguntado tem `scan_executado: true`, use os `achados[]` para responder "
+                "com precisão (ferramenta, arquivo, regra, severidade). NÃO peça para rodar a análise "
+                "de novo — ela já foi executada.\n"
+                "2. Se `scan_executado: false`, aí sim diga que aquele commit ainda não foi escaneado e "
+                "oriente a rodar a Análise SAST nas Ações Rápidas.\n"
+                "3. NUNCA invente vulnerabilidades a partir da mensagem do commit — use apenas `achados[]`.\n"
+                "4. NUNCA sugira acessar o GitHub ou outras ferramentas externas.\n"
+                "5. Se a informação realmente não estiver no JSON, diga que não está visível no mapa atual.\n\n"
+                f"[SNAPSHOT DO MAPA MENTAL — JSON]\n{context}\n\n"
                 f"Pergunta do usuário: {prompt}"
             )
         elif not needs_context:
-            current_system_instruction = "Você é o PreviSwit AI, um assistente de cibersegurança. Responda de forma curta, educada e conversacional. Não há dados de repositório no momento."
+            current_system_instruction = (
+                "Você é o PreviSwit AI, um assistente de cibersegurança. O usuário mandou uma mensagem "
+                "social/curta. Responda de forma breve, educada e conversacional, e ofereça ajuda com "
+                "análise de commits, vulnerabilidades ou postura de segurança."
+            )
 
         contents.append({"role": "user", "parts": [{"text": final_prompt}]})
 
@@ -225,7 +265,7 @@ class MapaMentalAgent:
                     config=types.GenerateContentConfig(
                         system_instruction=current_system_instruction,
                         temperature=0.4,
-                        max_output_tokens=1048,
+                        max_output_tokens=3072,
                     ),
                 )
                 answer = response.text.strip()

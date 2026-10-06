@@ -342,21 +342,23 @@ export default function DomainsPage() {
 
           } else if (msg.action === 'SCAN_RESULT' || msg.status === 'SCAN_RESULT') {
             const data = msg.data || msg;
-            const url  = msg.target || scanningTarget;
-
-            if (url) {
-              // Grava no localStorage
-              const payload = data;
-              localStorage.setItem(storageKey(url), JSON.stringify(payload));
-
-              setScanResults(prev => ({ ...prev, [url]: payload }));
-              setSelectedTarget(url);
-              setScanningTarget(null);
-
-              const findings = payload.findings_prioritized || payload.findings || payload.vulnerabilities || [];
-              showToast(`Scan concluído — ${findings.length} finding${findings.length !== 1 ? 's' : ''} detectado${findings.length !== 1 ? 's' : ''}`);
-              addLog(`Scan DAST concluído para ${url} — ${findings.length} findings.`, 'success');
-            }
+            // Sempre reseta o "executando", mesmo que target esteja vazio
+            setScanningTarget(prev => {
+              const url = msg.target || prev;
+              if (url) {
+                const payload = data;
+                localStorage.setItem(storageKey(url), JSON.stringify(payload));
+                setScanResults(r => ({ ...r, [url]: payload }));
+                setSelectedTarget(url);
+                const findings = payload.findings_prioritized || payload.findings || payload.vulnerabilities || [];
+                showToast(`Scan concluído — ${findings.length} finding${findings.length !== 1 ? 's' : ''} detectado${findings.length !== 1 ? 's' : ''}`);
+                addLog(`Scan DAST concluído para ${url} — ${findings.length} findings.`, 'success');
+              } else {
+                addLog('Recebido SCAN_RESULT sem target — resetando estado de scan.', 'error');
+                showToast('Scan concluído (sem target no payload)');
+              }
+              return null;
+            });
 
           } else if (msg.action === 'SCAN_ERROR' || msg.status === 'SCAN_ERROR') {
             setScanningTarget(null);

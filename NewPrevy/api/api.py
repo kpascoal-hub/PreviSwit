@@ -46,6 +46,7 @@ from api.routers.sast         import router as sast_router          # ← SAST D
 from api.routers.cloud        import router as cloud_router         # ← Cloud Security & IaC (CSPM)
 from api.routers.containers   import router as containers_router    # ← Container Security (Trivy Image)
 from api.routers.schedules    import router as schedules_router     # ← Pentests Contínuos (Scheduler)
+from api.routers.posture      import router as posture_router       # ← Postura, Conformidade e Simulação
 from api        import scheduler as sched_engine
 from config import Config
 
@@ -102,6 +103,7 @@ app.include_router(sast_router,         prefix="/api/v1", tags=["SAST Dispatch (
 app.include_router(cloud_router,        prefix="/api/v1", tags=["Cloud Security & IaC (CSPM)"])
 app.include_router(containers_router,   prefix="/api/v1", tags=["Container Security (Trivy Image)"])
 app.include_router(schedules_router,    prefix="/api/v1", tags=["Pentests Contínuos (Scheduler)"])
+app.include_router(posture_router,      prefix="/api/v1", tags=["Posture, Compliance & Investment"])
 
 
 @app.on_event("startup")
@@ -142,8 +144,13 @@ class ConnectionManager:
         if self.dashboard_ws:
             try:
                 await self.dashboard_ws.send_json(message)
-            except:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger("api").warning(
+                    "send_to_dashboard falhou (action=%s): %s",
+                    message.get("action") if isinstance(message, dict) else "?",
+                    e,
+                )
 
     async def send_to_agent(self, agent_id: str, message: dict):
         if agent_id in self.agent_ws:

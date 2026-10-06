@@ -41,7 +41,7 @@ import {
   Lock, Unlock, Activity, Search, ExternalLink,
   FileText, Zap, Database, Eye, ChevronRight,
   Box, Globe, Layers, HardDrive, Settings,
-  TrendingUp, Code2
+  TrendingUp, Code2, BrainCircuit, Loader2, Trash2
 } from 'lucide-react';
 
 const API = '/api/v1';
@@ -162,11 +162,49 @@ function ProviderCard({ provider }) {
 function MisconfigRow({ item, index }) {
   const sev = severityColor(item.severity);
   const [expanded, setExpanded] = useState(false);
+  const [aiText, setAiText] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const handleToggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && aiText === null && !aiLoading) {
+      const geminiKey = sessionStorage.getItem('gemini_api_key') || sessionStorage.getItem('GEMINI_KEY') || sessionStorage.getItem('gemini_key');
+      if (!geminiKey) return;
+      setAiLoading(true);
+      const prompt = `Você é um especialista em segurança de nuvem e IaC (Infraestrutura como Código).
+Analise a seguinte má-configuração detectada pelo Checkov/Trivy e responda EXCLUSIVAMENTE em português brasileiro.
+
+**ID do Check:** ${item.id || 'N/A'}
+**Má-configuração:** ${item.misconfiguration}
+**Severidade:** ${item.severity || 'N/A'}
+**Framework:** ${item.framework || 'N/A'}
+**Recurso afetado:** ${item.resource || 'N/A'}
+${item.resolution ? `**Resolução (en):** ${item.resolution}` : ''}
+
+Responda com:
+1. **O que é:** Explique o problema em 1-2 frases simples em português.
+2. **Por que é perigoso:** Descreva o risco concreto de segurança.
+3. **Como corrigir:** Passos práticos de remediação para ${item.framework || 'IaC'}.
+
+Seja direto e técnico. Máximo 150 palavras no total.`;
+
+      fetch('/api/v1/ai/insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Gemini-Key': geminiKey },
+        body: JSON.stringify({ prompt }),
+      })
+        .then(r => r.json())
+        .then(d => setAiText(d.response || '⚠️ Sem resposta da IA.'))
+        .catch(() => setAiText('⚠️ Erro ao consultar IA.'))
+        .finally(() => setAiLoading(false));
+    }
+  };
 
   return (
     <div className="group">
       <div
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
         className={`grid grid-cols-12 gap-3 items-center px-4 py-3 cursor-pointer
                     border-b border-white/[0.04] hover:bg-white/[0.03] transition-all duration-150
                     ${index % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.01]'}`}
@@ -251,6 +289,29 @@ function MisconfigRow({ item, index }) {
               </div>
             )}
           </div>
+
+          {/* AI Translation panel */}
+          {(aiLoading || aiText) && (
+            <div className="mt-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+              <p className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
+                <BrainCircuit className="w-3 h-3" /> Análise IA — Português
+              </p>
+              {aiLoading ? (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Consultando Gemini...
+                </div>
+              ) : (
+                <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{aiText}</p>
+              )}
+            </div>
+          )}
+
+          {/* Prompt to configure Gemini if key is missing */}
+          {!aiLoading && aiText === null && !sessionStorage.getItem('gemini_api_key') && !sessionStorage.getItem('GEMINI_KEY') && !sessionStorage.getItem('gemini_key') && (
+            <p className="mt-2 text-[10px] text-gray-600 flex items-center gap-1">
+              <BrainCircuit className="w-3 h-3" /> Configure a chave Gemini em Integrações para ver a análise em português.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -374,6 +435,17 @@ export default function CloudPage() {
       setScanStatus('ERROR');
       showToast('Erro de conexão com o backend');
     }
+  };
+
+  // ── Limpar último scan ────────────────────────────────────────────────────
+  const handleClearScan = () => {
+    localStorage.removeItem('previswit_iac_last');
+    setScanData(null);
+    setScanStatus(null);
+    setScanTarget('');
+    setScanId(null);
+    setScanError(null);
+    showToast('Registros de má-configurações removidos');
   };
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -528,6 +600,13 @@ export default function CloudPage() {
               <span className="text-[10px] text-gray-500 bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-md">
                 {misconfigs.length} encontrada{misconfigs.length !== 1 ? 's' : ''}
               </span>
+              <button
+                onClick={handleClearScan}
+                title="Limpar resultados"
+                className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-150"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
             {scanData?.frameworks_detected?.length > 0 && (
               <div className="flex items-center gap-1.5">

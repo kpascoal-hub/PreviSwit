@@ -284,6 +284,32 @@ async def handle_message(ws, raw: str):
     if action == "START_SCAN" and target:
         pipeline = msg.get("pipeline", "all")
         mode     = msg.get("mode", "safe")   # "safe" (Carga Seca) ou "hot" (Gêmeo Efêmero)
+
+        # Aliases semânticos → pipelines numéricos aceitos por main.run_scan()
+        # run_scan aceita: "1", "2", "3", "4", "6" ou "all".
+        # Qualquer string fora desse conjunto faz o scan rodar 0 módulos → 0 findings.
+        _PIPELINE_ALIASES = {
+            # DAST rápido: Recon + Nmap + Gobuster + SSL + Subdomain + OSINT + Nikto + CORS
+            # (Pipeline 1 do run_scan — cobre o essencial em ~1-2 min).
+            # Não usar "all": inclui Pipelines 2/3/4/6 (crawler agressivo, IA, ataque
+            # automático e Gemini attacker) e o scan passa fácil de 10 min.
+            "dast_api":   "1",
+            "dast":       "1",
+            "recon":      "1",
+            "aggressive": "2",
+            "ai":         "3",
+            "attack":     "4",
+            "offensive":  "6",
+            "full":       "all",   # opt-in explícito para o scan completo
+        }
+        original_pipeline = pipeline
+        pipeline = _PIPELINE_ALIASES.get(pipeline, pipeline)
+        if pipeline not in {"1", "2", "3", "4", "6", "all"}:
+            log.warning("⚠️  Pipeline '%s' desconhecido — usando 'all' como fallback", original_pipeline)
+            pipeline = "all"
+        if pipeline != original_pipeline:
+            log.info("🔀 Alias de pipeline: '%s' → '%s'", original_pipeline, pipeline)
+
         log.info("📡 ORDEM RECEBIDA  →  action=%s  target=%s  pipeline=%s  mode=%s",
                  action, target, pipeline, mode)
 

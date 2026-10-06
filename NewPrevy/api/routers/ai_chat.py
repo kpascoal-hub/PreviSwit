@@ -56,6 +56,10 @@ async def ai_chat_endpoint(body: ChatRequest, x_gemini_key: str = Header(default
     # Resolve o texto da mensagem (aceita 'prompt' ou 'message')
     text = (body.prompt or body.message or "").strip()
 
+    # Diagnóstico do contexto recebido do Mapa Mental
+    _ctx = body.context or ""
+    print(f"[DEBUG CTX] len={len(_ctx)} preview={_ctx[:300]!r}")
+
     if not text:
         raise HTTPException(status_code=400, detail="Forneça 'prompt' ou 'message' no body.")
 

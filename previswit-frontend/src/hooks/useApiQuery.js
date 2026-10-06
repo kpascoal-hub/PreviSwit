@@ -23,7 +23,7 @@
  */
 import { useState, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10200/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:10100/api/v1';
 
 /**
  * Realiza uma chamada à API REST da PreviSwit.
