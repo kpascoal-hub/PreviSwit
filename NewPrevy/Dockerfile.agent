@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 PreviSwit Team
+# SPDX-License-Identifier: GPL-3.0-or-later
 # =============================================================================
 # Dockerfile — previswit-agent
 # Base: Kali Linux Rolling | Framework de Pentest + SAST
